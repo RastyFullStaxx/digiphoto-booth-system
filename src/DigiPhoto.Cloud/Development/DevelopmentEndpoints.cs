@@ -36,7 +36,7 @@ public static class DevelopmentEndpoints
         CloudDbContext database,
         CancellationToken cancellationToken)
     {
-        var tenantId = tenantContext.TenantId!.Value;
+        var tenantId = tenantContext.TenantId;
         var tenant = await database.Tenants
             .AsNoTracking()
             .SingleOrDefaultAsync(row => row.Id == tenantId, cancellationToken);

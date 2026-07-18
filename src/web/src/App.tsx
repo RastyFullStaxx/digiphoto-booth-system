@@ -1,9 +1,14 @@
+import { lazy, Suspense } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import { GalleryPage } from './pages/GalleryPage'
 import { HomePage } from './pages/HomePage'
 import { KioskPage } from './pages/KioskPage'
 import { PortalPage } from './pages/PortalPage'
-import { TemplateEditorPage } from './pages/TemplateEditorPage'
+
+const TemplateEditorPage = lazy(async () => {
+  const module = await import('./pages/TemplateEditorPage')
+  return { default: module.TemplateEditorPage }
+})
 
 export function AppRoutes() {
   return (
@@ -11,7 +16,14 @@ export function AppRoutes() {
       <Route path="/" element={<HomePage />} />
       <Route path="/kiosk" element={<KioskPage />} />
       <Route path="/portal" element={<PortalPage />} />
-      <Route path="/templates/editor" element={<TemplateEditorPage />} />
+      <Route
+        path="/templates/editor"
+        element={(
+          <Suspense fallback={<main id="main-content" className="route-loading" aria-live="polite">Loading Template Studio...</main>}>
+            <TemplateEditorPage />
+          </Suspense>
+        )}
+      />
       <Route path="/g/demo" element={<GalleryPage />} />
       <Route path="*" element={<HomePage />} />
     </Routes>

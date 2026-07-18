@@ -1,10 +1,13 @@
 using System.Text.Json;
+using DigiPhoto.Booth.Bundles;
+using DigiPhoto.Booth.Configuration;
 using DigiPhoto.Booth.Data;
 using DigiPhoto.Booth.Hardware;
 using DigiPhoto.Booth.Storage;
 using DigiPhoto.Contracts;
 using DigiPhoto.Contracts.Events;
 using DigiPhoto.Contracts.Sessions;
+using DigiPhoto.Contracts.Templates;
 using Microsoft.EntityFrameworkCore;
 
 namespace DigiPhoto.Booth.Sessions;
@@ -14,6 +17,8 @@ public sealed class BoothWorkflow(
     ICameraAdapter camera,
     IPrinterAdapter printer,
     BoothFileStore fileStore,
+    VerifiedEventBundleStore bundles,
+    BoothIdentityOptions identity,
     TimeProvider clock) : IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -41,21 +46,17 @@ public sealed class BoothWorkflow(
         StartSessionRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (request.SessionId == Guid.Empty || request.TenantId == Guid.Empty ||
-            request.DeviceId == Guid.Empty || request.EventId == Guid.Empty)
+        if (request.SessionId == Guid.Empty || request.EventId == Guid.Empty)
         {
-            throw new ArgumentException("Session, tenant, device, and event IDs must be non-empty.");
+            throw new ArgumentException("Session and event IDs must be non-empty.");
         }
 
-        if (request.EventBundleSequence <= 0)
+        if (identity.TenantId == Guid.Empty || identity.DeviceId == Guid.Empty)
         {
-            throw new ArgumentOutOfRangeException(nameof(request), "Event bundle sequence must be positive.");
+            throw new BoothWorkflowException("The booth tenant and device identity must be configured.");
         }
 
-        if (request.RetentionDays is not (7 or 30 or 90))
-        {
-            throw new ArgumentOutOfRangeException(nameof(request), "Retention must be 7, 30, or 90 days.");
-        }
+        var verifiedBundle = await bundles.GetLatestStartableAsync(request.EventId, cancellationToken);
 
         await _stateGate.WaitAsync(cancellationToken);
         try
@@ -70,13 +71,13 @@ public sealed class BoothWorkflow(
             var session = new BoothSessionRow
             {
                 Id = request.SessionId,
-                TenantId = request.TenantId,
-                DeviceId = request.DeviceId,
-                EventId = request.EventId,
-                EventBundleSequence = request.EventBundleSequence,
+                TenantId = verifiedBundle.Manifest.TenantId,
+                DeviceId = identity.DeviceId,
+                EventId = verifiedBundle.Manifest.EventId,
+                EventBundleSequence = verifiedBundle.Manifest.Sequence,
                 State = SessionState.Attract,
                 ActiveSlot = 1,
-                RetentionDays = request.RetentionDays,
+                RetentionDays = verifiedBundle.Manifest.RetentionDays,
                 StartedAtUtc = now,
                 UpdatedAtUtc = now,
             };
@@ -104,12 +105,25 @@ public sealed class BoothWorkflow(
         CancellationToken cancellationToken = default) =>
         TransitionAsync(sessionId, SessionState.Attract, SessionState.PackageSelection, null, cancellationToken);
 
-    public Task<BoothSessionSnapshot> SelectPackageAsync(
+    public async Task<BoothSessionSnapshot> SelectPackageAsync(
         Guid sessionId,
-        PackageSnapshot package,
+        Guid packageVersionId,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(package);
+        if (packageVersionId == Guid.Empty)
+        {
+            throw new ArgumentException("A package version ID is required.", nameof(packageVersionId));
+        }
+
+        var current = await GetAsync(sessionId, cancellationToken);
+        var verifiedBundle = await bundles.GetExactAsync(
+            current.EventId,
+            current.EventBundleSequence,
+            cancellationToken);
+        var package = verifiedBundle.Manifest.Packages.SingleOrDefault(item =>
+            item.VersionId == packageVersionId)
+            ?? throw new BoothWorkflowException("The selected package is not in this session's verified bundle.");
+
         if (package.MediaMode != MediaMode.Photo)
         {
             throw new BoothWorkflowException("This simulator slice supports the photo package only.");
@@ -126,12 +140,14 @@ public sealed class BoothWorkflow(
             throw new BoothWorkflowException("This first simulator slice supports exactly one required shot.");
         }
 
-        if (package.PrintCopies <= 0)
+        if (package.PrintCopies is < 1 or > 10)
         {
-            throw new ArgumentOutOfRangeException(nameof(package), "Print copies must be positive.");
+            throw new ArgumentOutOfRangeException(
+                nameof(packageVersionId),
+                "The selected package's print copies must be between 1 and 10.");
         }
 
-        return TransitionAsync(
+        return await TransitionAsync(
             sessionId,
             SessionState.PackageSelection,
             SessionState.PrivacyNotice,
@@ -145,14 +161,34 @@ public sealed class BoothWorkflow(
             cancellationToken);
     }
 
-    public Task<BoothSessionSnapshot> AcceptPrivacyAsync(
+    public async Task<BoothSessionSnapshot> AcceptPrivacyAsync(
         Guid sessionId,
-        PrivacyRecord privacy,
+        AcceptPrivacyRequest assent,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(privacy);
+        ArgumentNullException.ThrowIfNull(assent);
+        var current = await GetAsync(sessionId, cancellationToken);
+        var verifiedBundle = await bundles.GetExactAsync(
+            current.EventId,
+            current.EventBundleSequence,
+            cancellationToken);
+        var notice = verifiedBundle.Manifest.PrivacyNotice;
+        var privacy = new PrivacyRecord(
+            notice.NoticeId,
+            notice.Version,
+            notice.ContentSha256,
+            notice.Locale,
+            LawfulBasis: "contract",
+            assent.DisplayedAtUtc,
+            assent.AssentedAtUtc,
+            assent.AssentingAction,
+            assent.ParticipantsConfirmed,
+            assent.IncludesMinor,
+            assent.GuardianConfirmed,
+            assent.PromotionConsent,
+            assent.PublicDisplayConsent);
         ValidatePrivacy(privacy);
-        return TransitionAsync(
+        return await TransitionAsync(
             sessionId,
             SessionState.PrivacyNotice,
             SessionState.LivePreview,
@@ -175,33 +211,44 @@ public sealed class BoothWorkflow(
             await using var database = await contextFactory.CreateDbContextAsync(cancellationToken);
             var session = await FindAsync(database, sessionId, cancellationToken);
             EnsureActive(session);
+            var captureRequest = camera.PlanCapture(
+                session.TenantId,
+                session.EventId,
+                session.Id,
+                Guid.NewGuid());
+            var pendingCapture = new SessionMediaRow
+            {
+                Id = captureRequest.MediaId,
+                TenantId = session.TenantId,
+                SessionId = session.Id,
+                Kind = MediaKind.OriginalPhoto,
+                RelativePath = captureRequest.RelativePath,
+                Sha256 = string.Empty,
+                ByteLength = 0,
+                CreatedAtUtc = clock.GetUtcNow(),
+            };
+            session.Media.Add(pendingCapture);
             ChangeState(session, SessionState.Countdown, SessionState.Capturing);
             await database.SaveChangesAsync(cancellationToken);
 
             CameraCapture capture;
             try
             {
-                capture = await camera.CaptureAsync(sessionId, cancellationToken);
+                capture = await camera.CaptureAsync(captureRequest, cancellationToken);
             }
             catch
             {
+                session.RecoveryReason = "Camera capture failed or its outcome is unknown.";
                 ChangeState(session, SessionState.Capturing, SessionState.RecoveryRequired);
                 await database.SaveChangesAsync(CancellationToken.None);
                 throw;
             }
 
-            session.Media.Add(new SessionMediaRow
-            {
-                Id = capture.MediaId,
-                SessionId = session.Id,
-                Kind = MediaKind.OriginalPhoto,
-                RelativePath = capture.RelativePath,
-                Sha256 = capture.Sha256,
-                ByteLength = capture.ByteLength,
-                WidthPx = capture.WidthPx,
-                HeightPx = capture.HeightPx,
-                CreatedAtUtc = clock.GetUtcNow(),
-            });
+            pendingCapture.RelativePath = capture.RelativePath;
+            pendingCapture.Sha256 = capture.Sha256;
+            pendingCapture.ByteLength = capture.ByteLength;
+            pendingCapture.WidthPx = capture.WidthPx;
+            pendingCapture.HeightPx = capture.HeightPx;
             ChangeState(session, SessionState.Capturing, SessionState.Review);
             await database.SaveChangesAsync(cancellationToken);
             return Map(session);
@@ -231,9 +278,19 @@ public sealed class BoothWorkflow(
             EnsureActive(session);
             EnsureState(session, SessionState.Rendering);
 
-            var stored = await fileStore.WriteRenderAsync(
-                $"sessions/{sessionId:N}/output/{sessionId:N}.png",
+            var verifiedBundle = await bundles.GetExactAsync(
+                session.EventId,
+                session.EventBundleSequence,
+                cancellationToken);
+            var package = verifiedBundle.Manifest.Packages.Single(item =>
+                item.VersionId == session.PackageVersionId);
+            var profile = PrintProfiles.Get(package.PrintLayout);
+
+            var stored = await fileStore.WriteRenderPngAsync(
+                $"tenants/{session.TenantId:N}/events/{session.EventId:N}/sessions/{sessionId:N}/output/{sessionId:N}.png",
                 png,
+                profile.SheetWidthPx,
+                profile.SheetHeightPx,
                 cancellationToken);
 
             var existing = session.Media.SingleOrDefault(item => item.Kind == MediaKind.PrintComposite);
@@ -242,13 +299,14 @@ public sealed class BoothWorkflow(
                 session.Media.Add(new SessionMediaRow
                 {
                     Id = session.Id,
+                    TenantId = session.TenantId,
                     SessionId = session.Id,
                     Kind = MediaKind.PrintComposite,
                     RelativePath = stored.RelativePath,
                     Sha256 = stored.Sha256,
                     ByteLength = stored.ByteLength,
-                    WidthPx = 1200,
-                    HeightPx = 1800,
+                    WidthPx = profile.SheetWidthPx,
+                    HeightPx = profile.SheetHeightPx,
                     CreatedAtUtc = clock.GetUtcNow(),
                 });
             }
@@ -257,6 +315,8 @@ public sealed class BoothWorkflow(
                 existing.RelativePath = stored.RelativePath;
                 existing.Sha256 = stored.Sha256;
                 existing.ByteLength = stored.ByteLength;
+                existing.WidthPx = profile.SheetWidthPx;
+                existing.HeightPx = profile.SheetHeightPx;
                 existing.CreatedAtUtc = clock.GetUtcNow();
             }
 
@@ -289,10 +349,22 @@ public sealed class BoothWorkflow(
             EnsureState(session, SessionState.PrintPending);
             var output = session.Media.SingleOrDefault(item => item.Kind == MediaKind.PrintComposite)
                 ?? throw new BoothWorkflowException("A persisted print composite is required before printing.");
+            var persistedOutput = await fileStore.InspectAsync(output.RelativePath, cancellationToken);
+            if (persistedOutput is null || persistedOutput.ByteLength != output.ByteLength ||
+                !string.Equals(persistedOutput.Sha256, output.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                session.RecoveryReason = "The final output is missing or failed its SHA-256 check.";
+                ChangeState(session, SessionState.PrintPending, SessionState.RecoveryRequired);
+                await database.SaveChangesAsync(cancellationToken);
+                throw new BoothWorkflowException(
+                    "The final output is missing or corrupt; nothing was sent to the printer.");
+            }
+
             var now = clock.GetUtcNow();
             var job = new PrintJobRow
             {
                 Id = Guid.NewGuid(),
+                TenantId = session.TenantId,
                 SessionId = session.Id,
                 State = PrintJobState.Pending,
                 RequestedCopies = session.PrintCopies,
@@ -320,6 +392,7 @@ public sealed class BoothWorkflow(
             {
                 job.State = PrintJobState.Ambiguous;
                 job.UpdatedAtUtc = clock.GetUtcNow();
+                session.RecoveryReason = "Printer submission failed with an unknown physical outcome.";
                 ChangeState(session, SessionState.Printing, SessionState.RecoveryRequired);
                 await database.SaveChangesAsync(CancellationToken.None);
                 throw;
@@ -338,6 +411,9 @@ public sealed class BoothWorkflow(
                 job.State = outcome == PrinterSubmissionOutcome.Ambiguous
                     ? PrintJobState.Ambiguous
                     : PrintJobState.Failed;
+                session.RecoveryReason = outcome == PrinterSubmissionOutcome.Ambiguous
+                    ? "The printer may have accepted the job; it will not be submitted again automatically."
+                    : "The printer rejected the job; operator review is required.";
                 ChangeState(session, SessionState.Printing, SessionState.RecoveryRequired);
             }
 
@@ -355,6 +431,11 @@ public sealed class BoothWorkflow(
         PrintResolution resolution,
         CancellationToken cancellationToken = default)
     {
+        if (!Enum.IsDefined(resolution))
+        {
+            throw new ArgumentOutOfRangeException(nameof(resolution));
+        }
+
         await _stateGate.WaitAsync(cancellationToken);
         try
         {
@@ -372,16 +453,48 @@ public sealed class BoothWorkflow(
             if (resolution == PrintResolution.ConfirmedPrinted)
             {
                 printJob.State = PrintJobState.Completed;
+                session.RecoveryReason = "Operator confirmed that the ambiguous print completed.";
                 ChangeState(session, SessionState.RecoveryRequired, SessionState.Completed);
                 session.CompletedAtUtc = clock.GetUtcNow();
             }
             else
             {
                 printJob.State = PrintJobState.Failed;
+                session.RecoveryReason = "Operator cancelled the session without another print attempt.";
                 ChangeState(session, SessionState.RecoveryRequired, SessionState.Cancelled);
             }
 
             printJob.UpdatedAtUtc = clock.GetUtcNow();
+            await database.SaveChangesAsync(cancellationToken);
+            return Map(session);
+        }
+        finally
+        {
+            _stateGate.Release();
+        }
+    }
+
+    public async Task<BoothSessionSnapshot> CancelRecoveryAsync(
+        Guid sessionId,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        var normalizedReason = reason.Trim();
+        if (normalizedReason.Length is < 3 or > 500)
+        {
+            throw new ArgumentOutOfRangeException(nameof(reason), "Recovery reason must be 3 to 500 characters.");
+        }
+
+        await _stateGate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var database = await contextFactory.CreateDbContextAsync(cancellationToken);
+            var session = await FindAsync(database, sessionId, cancellationToken);
+            EnsureActive(session);
+            EnsureState(session, SessionState.RecoveryRequired);
+            session.RecoveryReason = normalizedReason;
+            ChangeState(session, SessionState.RecoveryRequired, SessionState.Cancelled);
             await database.SaveChangesAsync(cancellationToken);
             return Map(session);
         }
@@ -433,7 +546,22 @@ public sealed class BoothWorkflow(
 
             if (session.State == SessionState.Capturing)
             {
-                ChangeState(session, SessionState.Capturing, SessionState.RecoveryRequired);
+                var pendingCapture = session.Media.SingleOrDefault(item =>
+                    item.Kind == MediaKind.OriginalPhoto && item.Sha256.Length == 0);
+                var stored = pendingCapture is null
+                    ? null
+                    : await fileStore.InspectAsync(pendingCapture.RelativePath, cancellationToken);
+                if (pendingCapture is not null && stored is not null)
+                {
+                    pendingCapture.Sha256 = stored.Sha256;
+                    pendingCapture.ByteLength = stored.ByteLength;
+                    ChangeState(session, SessionState.Capturing, SessionState.Review);
+                }
+                else
+                {
+                    session.RecoveryReason = "Capture was interrupted before a complete original was persisted.";
+                    ChangeState(session, SessionState.Capturing, SessionState.RecoveryRequired);
+                }
             }
             else if (session.State == SessionState.Printing)
             {
@@ -450,6 +578,8 @@ public sealed class BoothWorkflow(
                         session.PrintJob.UpdatedAtUtc = clock.GetUtcNow();
                     }
 
+                    session.RecoveryReason =
+                        "The booth restarted during printer submission; the job will not be sent again automatically.";
                     ChangeState(session, SessionState.Printing, SessionState.RecoveryRequired);
                 }
             }
@@ -514,8 +644,9 @@ public sealed class BoothWorkflow(
 
     private static void ValidatePrivacy(PrivacyRecord privacy)
     {
-        if (privacy.NoticeId == Guid.Empty || string.IsNullOrWhiteSpace(privacy.NoticeSha256) ||
-            privacy.NoticeSha256.Length != 64 || string.IsNullOrWhiteSpace(privacy.Locale) ||
+        if (privacy.NoticeId == Guid.Empty || privacy.NoticeVersion <= 0 ||
+            string.IsNullOrWhiteSpace(privacy.NoticeSha256) || privacy.NoticeSha256.Length != 64 ||
+            !privacy.NoticeSha256.All(Uri.IsHexDigit) || string.IsNullOrWhiteSpace(privacy.Locale) ||
             string.IsNullOrWhiteSpace(privacy.LawfulBasis) ||
             string.IsNullOrWhiteSpace(privacy.AssentingAction))
         {
@@ -551,6 +682,7 @@ public sealed class BoothWorkflow(
             ? null
             : JsonSerializer.Deserialize<PrivacyRecord>(session.PrivacyJson, JsonOptions);
         var media = session.Media
+            .Where(item => item.Sha256.Length == 64 && item.ByteLength > 0)
             .OrderBy(item => item.CreatedAtUtc)
             .Select(item => new MediaInventoryItem(
                 item.Id,
@@ -586,6 +718,7 @@ public sealed class BoothWorkflow(
             media.Count(item => item.Kind == MediaKind.OriginalPhoto),
             session.PrintCopies,
             privacy,
+            session.RecoveryReason,
             Payment: null,
             printJob,
             media,

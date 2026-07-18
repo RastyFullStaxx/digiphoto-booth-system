@@ -7,7 +7,7 @@ namespace DigiPhoto.Cloud.Data;
 
 public sealed class TenantContext
 {
-    public Guid? TenantId { get; private set; }
+    public Guid TenantId { get; private set; }
 
     public void Set(Guid tenantId)
     {
@@ -16,7 +16,7 @@ public sealed class TenantContext
             throw new ArgumentException("Tenant ID cannot be empty.", nameof(tenantId));
         }
 
-        if (TenantId is not null && TenantId != tenantId)
+        if (TenantId != Guid.Empty && TenantId != tenantId)
         {
             throw new InvalidOperationException("Tenant context cannot change during a scope.");
         }
@@ -190,7 +190,7 @@ public sealed class CloudDbContext(
             ConfigureTenantOwned(entity, "events");
             entity.HasKey(row => row.Id);
             entity.HasIndex(row => new { row.TenantId, row.Id }).IsUnique();
-            entity.HasIndex(row => new { row.TenantId, row.BundleSequence }).IsUnique();
+            entity.HasIndex(row => new { row.TenantId, row.BundleId }).IsUnique();
             entity.Property(row => row.Name).HasMaxLength(160);
             entity.Property(row => row.PrimaryColor).HasMaxLength(32);
             entity.Property(row => row.AccentColor).HasMaxLength(32);
@@ -241,13 +241,27 @@ public sealed class CloudDbContext(
     public override int SaveChanges()
     {
         ValidateTenantWrites();
-        return base.SaveChanges();
+        return base.SaveChanges(acceptAllChangesOnSuccess: true);
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        ValidateTenantWrites();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         ValidateTenantWrites();
-        return base.SaveChangesAsync(cancellationToken);
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess: true, cancellationToken);
+    }
+
+    public override Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateTenantWrites();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
     private void ConfigureTenantOwned<TEntity>(EntityTypeBuilder<TEntity> entity, string tableName)
@@ -260,7 +274,7 @@ public sealed class CloudDbContext(
             .HasForeignKey(row => row.TenantId)
             .OnDelete(DeleteBehavior.Restrict);
         entity.HasQueryFilter(row =>
-            tenantContext.TenantId.HasValue && row.TenantId == tenantContext.TenantId.Value);
+            tenantContext.TenantId != Guid.Empty && row.TenantId == tenantContext.TenantId);
     }
 
     private void ValidateTenantWrites()
@@ -269,12 +283,12 @@ public sealed class CloudDbContext(
         foreach (var entry in ChangeTracker.Entries<TenantOwnedRecord>()
                      .Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
         {
-            if (!currentTenantId.HasValue || currentTenantId.Value == Guid.Empty)
+            if (currentTenantId == Guid.Empty)
             {
                 throw new InvalidOperationException("A valid tenant context is required for tenant-owned writes.");
             }
 
-            if (entry.Entity.TenantId == Guid.Empty || entry.Entity.TenantId != currentTenantId.Value)
+            if (entry.Entity.TenantId == Guid.Empty || entry.Entity.TenantId != currentTenantId)
             {
                 throw new InvalidOperationException("Tenant-owned writes must match the current tenant context.");
             }

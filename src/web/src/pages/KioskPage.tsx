@@ -14,15 +14,15 @@ import {
   UsersThree,
   WifiHigh,
 } from '@phosphor-icons/react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { simulatorImages } from '../assets'
 import {
   CropFrame,
   DemoMediaNotice,
   PageBackLink,
   SimulatedPhoto,
   StatusLabel,
-  simulatorImages,
 } from '../components'
 
 type KioskStep =
@@ -160,6 +160,22 @@ export function KioskPage() {
   const currentCapture = simulatorImages[Math.min(captures.length, simulatorImages.length - 1)]
   const selectedPackage = packages.find((item) => item.id === packageId) ?? packages[0]
 
+  const resetSession = useCallback(() => {
+    setStep('attract')
+    setPackageId('strip')
+    setMinorAnswer('')
+    setNoticeConfirmed(false)
+    setGuardianConfirmed(false)
+    setPromotionConsent(false)
+    setPrivacyError('')
+    setCaptures([])
+    setFilter('original')
+    setCountdown(3)
+    setProcessIndex(0)
+    setCompletionSeconds(45)
+    window.scrollTo({ top: 0, behavior: 'auto' })
+  }, [])
+
   useEffect(() => {
     if (step !== 'countdown') {
       return
@@ -214,27 +230,19 @@ export function KioskPage() {
     if (step === 'complete' && completionSeconds === 0) {
       resetSession()
     }
-  })
-
-  function resetSession() {
-    setStep('attract')
-    setPackageId('strip')
-    setMinorAnswer('')
-    setNoticeConfirmed(false)
-    setGuardianConfirmed(false)
-    setPromotionConsent(false)
-    setPrivacyError('')
-    setCaptures([])
-    setFilter('original')
-    setCountdown(3)
-    setProcessIndex(0)
-    setCompletionSeconds(45)
-    window.scrollTo({ top: 0, behavior: 'instant' })
-  }
+  }, [completionSeconds, resetSession, step])
 
   function confirmPrivacy() {
-    if (!noticeConfirmed || minorAnswer === '' || (minorAnswer === 'yes' && !guardianConfirmed)) {
-      setPrivacyError('Confirm the privacy notice and answer the participant question before continuing.')
+    if (!noticeConfirmed) {
+      setPrivacyError('Confirm the privacy notice before continuing.')
+      return
+    }
+    if (minorAnswer === '') {
+      setPrivacyError('Answer whether anyone in the session is under 18 before continuing.')
+      return
+    }
+    if (minorAnswer === 'yes' && !guardianConfirmed) {
+      setPrivacyError('A parent or guardian must confirm before a minor joins the session.')
       return
     }
     setPrivacyError('')

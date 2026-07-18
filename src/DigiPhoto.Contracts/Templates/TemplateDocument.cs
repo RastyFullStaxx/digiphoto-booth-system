@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace DigiPhoto.Contracts.Templates;
 
@@ -6,6 +7,7 @@ public sealed record FabricEngine(string Name, int MajorVersion);
 
 public sealed record PixelDocument
 {
+    [JsonConstructor]
     public PixelDocument(int widthPx, int heightPx, int dpi)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(widthPx);

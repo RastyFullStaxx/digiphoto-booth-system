@@ -12,9 +12,20 @@ public sealed record CameraCapture(
     int WidthPx,
     int HeightPx);
 
+public sealed record CameraCaptureRequest(
+    Guid TenantId,
+    Guid EventId,
+    Guid SessionId,
+    Guid MediaId,
+    string RelativePath);
+
 public interface ICameraAdapter
 {
-    Task<CameraCapture> CaptureAsync(Guid sessionId, CancellationToken cancellationToken);
+    CameraCaptureRequest PlanCapture(Guid tenantId, Guid eventId, Guid sessionId, Guid mediaId);
+
+    Task<CameraCapture> CaptureAsync(
+        CameraCaptureRequest request,
+        CancellationToken cancellationToken);
 }
 
 public enum PrinterSubmissionOutcome
@@ -40,16 +51,28 @@ public interface IPrinterAdapter
 
 public sealed class SimulatedCameraAdapter(BoothFileStore fileStore) : ICameraAdapter
 {
-    public async Task<CameraCapture> CaptureAsync(Guid sessionId, CancellationToken cancellationToken)
+    public CameraCaptureRequest PlanCapture(
+        Guid tenantId,
+        Guid eventId,
+        Guid sessionId,
+        Guid mediaId) =>
+        new(
+            tenantId,
+            eventId,
+            sessionId,
+            mediaId,
+            $"tenants/{tenantId:N}/events/{eventId:N}/sessions/{sessionId:N}/originals/{mediaId:N}.simulated.ppm");
+
+    public async Task<CameraCapture> CaptureAsync(
+        CameraCaptureRequest request,
+        CancellationToken cancellationToken)
     {
-        var mediaId = Guid.NewGuid();
-        var relativePath = $"sessions/{sessionId:N}/originals/{mediaId:N}.simulated.ppm";
         var bytes = Encoding.ASCII.GetBytes(
-            $"P3\n# SYNTHETIC SIMULATED CAMERA CAPTURE {mediaId:N}\n2 2\n255\n80 80 80 220 220 220\n220 220 220 80 80 80\n");
-        var stored = await fileStore.WriteBytesAsync(relativePath, bytes, cancellationToken);
+            $"P3\n# SYNTHETIC SIMULATED CAMERA CAPTURE {request.MediaId:N}\n2 2\n255\n80 80 80 220 220 220\n220 220 220 80 80 80\n");
+        var stored = await fileStore.WriteBytesAsync(request.RelativePath, bytes, cancellationToken);
 
         return new CameraCapture(
-            mediaId,
+            request.MediaId,
             stored.RelativePath,
             stored.Sha256,
             stored.ByteLength,

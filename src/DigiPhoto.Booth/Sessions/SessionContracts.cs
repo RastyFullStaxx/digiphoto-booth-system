@@ -1,17 +1,22 @@
-using DigiPhoto.Contracts.Events;
 using DigiPhoto.Contracts.Sessions;
 
 namespace DigiPhoto.Booth.Sessions;
 
 public sealed record StartSessionRequest(
     Guid SessionId,
-    Guid TenantId,
-    Guid DeviceId,
-    Guid EventId,
-    long EventBundleSequence,
-    int RetentionDays);
+    Guid EventId);
 
-public sealed record SelectPackageRequest(PackageSnapshot Package);
+public sealed record SelectPackageRequest(Guid PackageVersionId);
+
+public sealed record AcceptPrivacyRequest(
+    DateTimeOffset DisplayedAtUtc,
+    DateTimeOffset AssentedAtUtc,
+    string AssentingAction,
+    bool ParticipantsConfirmed,
+    bool IncludesMinor,
+    bool GuardianConfirmed,
+    bool PromotionConsent,
+    bool PublicDisplayConsent);
 
 public enum PrintResolution
 {
@@ -20,6 +25,8 @@ public enum PrintResolution
 }
 
 public sealed record ResolvePrintRequest(PrintResolution Resolution);
+
+public sealed record CancelRecoveryRequest(string Reason);
 
 public sealed record BoothSessionSnapshot(
     int SchemaVersion,
@@ -36,6 +43,7 @@ public sealed record BoothSessionSnapshot(
     int CapturedShots,
     int PrintCopies,
     PrivacyRecord? Privacy,
+    string? RecoveryReason,
     PaymentAttemptReference? Payment,
     PrintJobReference? PrintJob,
     IReadOnlyList<MediaInventoryItem> Media,

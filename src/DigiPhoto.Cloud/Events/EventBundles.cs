@@ -25,7 +25,9 @@ public static class CanonicalJson
         return stream.ToArray();
     }
 
-    public static string Sha256Hex<T>(T value) => Sha256Hex(Serialize(value));
+    public static string Sha256Hex<T>(T value) => Sha256Hex((ReadOnlySpan<byte>)Serialize(value));
+
+    public static string Sha256Hex(byte[] value) => Sha256Hex((ReadOnlySpan<byte>)value);
 
     public static string Sha256Hex(ReadOnlySpan<byte> value) =>
         Convert.ToHexStringLower(SHA256.HashData(value));
@@ -210,6 +212,16 @@ public sealed class EventBundlePublisher(
             {
                 throw new InvalidDataException($"Asset {asset.Id} failed its content hash check.");
             }
+        }
+
+        var actualNoticeHash = CanonicalJson.Sha256Hex(
+            Encoding.UTF8.GetBytes($"{cloudEvent.AdultNotice}\n{cloudEvent.ChildNotice}"));
+        if (!CryptographicOperations.FixedTimeEquals(
+                Encoding.ASCII.GetBytes(cloudEvent.NoticeSha256),
+                Encoding.ASCII.GetBytes(actualNoticeHash)))
+        {
+            throw new InvalidDataException(
+                $"Privacy notice {cloudEvent.NoticeId} failed its content hash check.");
         }
 
         var manifest = new EventBundleManifest(

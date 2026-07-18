@@ -15,7 +15,7 @@ public static class SessionStateMachine
             [SessionState.Capturing] = [SessionState.Review, SessionState.RecoveryRequired],
             [SessionState.Review] = [SessionState.Rendering],
             [SessionState.Rendering] = [SessionState.PrintPending, SessionState.RecoveryRequired],
-            [SessionState.PrintPending] = [SessionState.Printing],
+            [SessionState.PrintPending] = [SessionState.Printing, SessionState.RecoveryRequired],
             [SessionState.Printing] = [SessionState.Completed, SessionState.RecoveryRequired],
             [SessionState.RecoveryRequired] = [SessionState.Completed, SessionState.Cancelled],
         };

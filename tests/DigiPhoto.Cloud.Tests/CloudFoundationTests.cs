@@ -1,14 +1,16 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
 using DigiPhoto.Cloud.Data;
 using DigiPhoto.Cloud.Development;
 using DigiPhoto.Cloud.Events;
+using DigiPhoto.Contracts;
 using DigiPhoto.Contracts.Events;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DigiPhoto.Cloud.Tests;
@@ -23,11 +25,17 @@ public sealed class CloudFoundationTests
         await using (var missingTenantScope = harness.Services.CreateAsyncScope())
         {
             var database = missingTenantScope.ServiceProvider.GetRequiredService<CloudDbContext>();
-            Assert.Empty(await database.Events.ToListAsync(TestContext.Current.CancellationToken));
+            Assert.Empty(await database.Events.ToListAsync(CancellationToken.None));
 
             database.Events.Add(CreateEvent(Guid.NewGuid(), DevelopmentFixtureIds.Tenant));
             await Assert.ThrowsAsync<InvalidOperationException>(
-                () => database.SaveChangesAsync(TestContext.Current.CancellationToken));
+                () => database.SaveChangesAsync(CancellationToken.None));
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => database.SaveChangesAsync(
+                    acceptAllChangesOnSuccess: false,
+                    cancellationToken: CancellationToken.None));
+            Assert.Throws<InvalidOperationException>(() => database.SaveChanges());
+            Assert.Throws<InvalidOperationException>(() => database.SaveChanges(acceptAllChangesOnSuccess: false));
         }
 
         await using (var firstTenantScope = harness.Services.CreateAsyncScope())
@@ -37,12 +45,12 @@ public sealed class CloudFoundationTests
             var database = firstTenantScope.ServiceProvider.GetRequiredService<CloudDbContext>();
             var visibleEvents = await database.Events
                 .Select(row => row.Id)
-                .ToListAsync(TestContext.Current.CancellationToken);
+                .ToListAsync(CancellationToken.None);
 
             Assert.Equal([DevelopmentFixtureIds.Event], visibleEvents);
             database.Events.Add(CreateEvent(Guid.NewGuid(), DevelopmentFixtureIds.OtherTenant));
             await Assert.ThrowsAsync<InvalidOperationException>(
-                () => database.SaveChangesAsync(TestContext.Current.CancellationToken));
+                () => database.SaveChangesAsync(CancellationToken.None));
         }
 
         await using (var otherTenantScope = harness.Services.CreateAsyncScope())
@@ -52,7 +60,7 @@ public sealed class CloudFoundationTests
             var database = otherTenantScope.ServiceProvider.GetRequiredService<CloudDbContext>();
             var visibleEvents = await database.Events
                 .Select(row => row.Id)
-                .ToListAsync(TestContext.Current.CancellationToken);
+                .ToListAsync(CancellationToken.None);
 
             Assert.Equal([DevelopmentFixtureIds.OtherEvent], visibleEvents);
         }
@@ -69,14 +77,15 @@ public sealed class CloudFoundationTests
 
         var first = await publisher.GetAsync(
             DevelopmentFixtureIds.Event,
-            TestContext.Current.CancellationToken)
+            CancellationToken.None)
             ?? throw new InvalidOperationException("Primary development bundle was not seeded.");
         var second = await publisher.GetAsync(
             DevelopmentFixtureIds.Event,
-            TestContext.Current.CancellationToken)
+            CancellationToken.None)
             ?? throw new InvalidOperationException("Primary development bundle was not stable.");
 
         Assert.Equal(1, first.Manifest.Sequence);
+        Assert.Equal(1, Assert.Single(first.Manifest.Packages).RequiredShots);
         Assert.Equal(
             CanonicalJson.Serialize(first.Manifest),
             CanonicalJson.Serialize(second.Manifest));
@@ -86,6 +95,15 @@ public sealed class CloudFoundationTests
             Assert.Equal(asset.Sha256, asset.Sha256.ToLowerInvariant());
         });
 
+        var database = scope.ServiceProvider.GetRequiredService<CloudDbContext>();
+        foreach (var asset in first.Manifest.Assets)
+        {
+            var storedAsset = await database.Assets.SingleAsync(
+                row => row.Id == asset.AssetId,
+                CancellationToken.None);
+            Assert.Equal(CanonicalJson.Sha256Hex(storedAsset.Content), asset.Sha256);
+        }
+
         var publicKey = signer.DescribePublicKey();
         Assert.True(DevelopmentBundleSigner.Verify(first.Manifest, first.Signature, publicKey));
         Assert.True(DevelopmentBundleSigner.Verify(second.Manifest, second.Signature, publicKey));
@@ -94,9 +112,28 @@ public sealed class CloudFoundationTests
             first.Signature,
             publicKey));
 
+        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var transported = JsonSerializer.Deserialize<SignedEventBundle>(
+            JsonSerializer.Serialize(first, jsonOptions),
+            jsonOptions)
+            ?? throw new InvalidOperationException("Signed bundle JSON round-trip failed.");
+        Assert.Equal(
+            Encoding.UTF8.GetString(CanonicalJson.Serialize(first.Manifest)),
+            Encoding.UTF8.GetString(CanonicalJson.Serialize(transported.Manifest)));
+        Assert.True(DevelopmentBundleSigner.Verify(transported.Manifest, transported.Signature, publicKey));
+
+        var storedEvent = await database.Events.SingleAsync(
+            row => row.Id == DevelopmentFixtureIds.Event,
+            CancellationToken.None);
+        storedEvent.AdultNotice += " tampered";
+        await database.SaveChangesAsync(CancellationToken.None);
+        await Assert.ThrowsAsync<InvalidDataException>(() => publisher.GetAsync(
+            DevelopmentFixtureIds.Event,
+            CancellationToken.None));
+
         Assert.Null(await publisher.GetAsync(
             DevelopmentFixtureIds.OtherEvent,
-            TestContext.Current.CancellationToken));
+            CancellationToken.None));
     }
 
     private static EventRecord CreateEvent(Guid id, Guid tenantId) => new()
@@ -136,28 +173,48 @@ public sealed class DevelopmentApiTests
 
         var missing = await client.GetAsync(
             "/api/v1/development/fixture",
-            TestContext.Current.CancellationToken);
+            CancellationToken.None);
         Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
         Assert.Equal("application/problem+json", missing.Content.Headers.ContentType?.MediaType);
 
         using var invalidRequest = new HttpRequestMessage(HttpMethod.Get, "/api/v1/development/fixture");
         invalidRequest.Headers.Add("X-DigiPhoto-Tenant-Id", "not-a-uuid");
-        var invalid = await client.SendAsync(invalidRequest, TestContext.Current.CancellationToken);
+        var invalid = await client.SendAsync(invalidRequest, CancellationToken.None);
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
 
         using var fixtureRequest = new HttpRequestMessage(HttpMethod.Get, "/api/v1/development/fixture");
         fixtureRequest.Headers.Add("X-DigiPhoto-Tenant-Id", DevelopmentFixtureIds.Tenant.ToString());
-        var fixture = await client.SendAsync(fixtureRequest, TestContext.Current.CancellationToken);
+        var fixture = await client.SendAsync(fixtureRequest, CancellationToken.None);
         Assert.Equal(HttpStatusCode.OK, fixture.StatusCode);
+
+        using var bundleRequest = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/api/v1/development/events/{DevelopmentFixtureIds.Event}/bundle");
+        bundleRequest.Headers.Add("X-DigiPhoto-Tenant-Id", DevelopmentFixtureIds.Tenant.ToString());
+        var bundleResponse = await client.SendAsync(bundleRequest, CancellationToken.None);
+        var bundle = await bundleResponse.Content.ReadFromJsonAsync<SignedEventBundle>(CancellationToken.None)
+            ?? throw new InvalidOperationException("Development bundle response was empty.");
+        var publicKey = await client.GetFromJsonAsync<DevelopmentSigningKey>(
+            "/api/v1/development/signing-key",
+            CancellationToken.None)
+            ?? throw new InvalidOperationException("Development signing key response was empty.");
+        Assert.Equal(HttpStatusCode.OK, bundleResponse.StatusCode);
+        Assert.True(DevelopmentBundleSigner.Verify(bundle.Manifest, bundle.Signature, publicKey));
+        Assert.False(bundle.Manifest.PaymentEnabled);
+        Assert.True(bundle.Manifest.IssuedAtUtc <= DateTimeOffset.UtcNow.AddMinutes(5));
+        Assert.True(bundle.Manifest.ExpiresAtUtc > DateTimeOffset.UtcNow);
+        var package = Assert.Single(bundle.Manifest.Packages);
+        Assert.Equal(1, package.RequiredShots);
+        Assert.Equal(new Money(0, "PHP"), package.Price);
 
         using var crossTenantRequest = new HttpRequestMessage(
             HttpMethod.Get,
             $"/api/v1/development/events/{DevelopmentFixtureIds.OtherEvent}/bundle");
         crossTenantRequest.Headers.Add("X-DigiPhoto-Tenant-Id", DevelopmentFixtureIds.Tenant.ToString());
-        var crossTenant = await client.SendAsync(crossTenantRequest, TestContext.Current.CancellationToken);
+        var crossTenant = await client.SendAsync(crossTenantRequest, CancellationToken.None);
         Assert.Equal(HttpStatusCode.NotFound, crossTenant.StatusCode);
 
-        var health = await client.GetAsync("/health", TestContext.Current.CancellationToken);
+        var health = await client.GetAsync("/health", CancellationToken.None);
         Assert.Equal(HttpStatusCode.OK, health.StatusCode);
     }
 }
@@ -171,16 +228,15 @@ internal sealed class CloudApplicationFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
-        builder.ConfigureAppConfiguration((_, configuration) =>
-            configuration.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:CloudDatabase"] = $"Data Source={databasePath}",
-            }));
+        builder.UseSetting(
+            "ConnectionStrings:CloudDatabase",
+            $"Data Source={databasePath}");
     }
 
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
+        SqliteConnection.ClearAllPools();
         if (disposing && File.Exists(databasePath))
         {
             File.Delete(databasePath);
@@ -203,7 +259,7 @@ internal sealed class CloudHarness : IAsyncDisposable
     public static async Task<CloudHarness> CreateAsync()
     {
         var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await connection.OpenAsync(CancellationToken.None);
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddLogging();
         serviceCollection.AddScoped<TenantContext>();
@@ -211,7 +267,7 @@ internal sealed class CloudHarness : IAsyncDisposable
         serviceCollection.AddSingleton<DevelopmentBundleSigner>();
         serviceCollection.AddScoped<EventBundlePublisher>();
         var services = serviceCollection.BuildServiceProvider();
-        await DevelopmentFixtureSeeder.SeedAsync(services, TestContext.Current.CancellationToken);
+        await DevelopmentFixtureSeeder.SeedAsync(services, CancellationToken.None);
         return new CloudHarness(connection, services);
     }
 

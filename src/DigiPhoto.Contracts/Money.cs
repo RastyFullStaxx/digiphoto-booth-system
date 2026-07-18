@@ -1,9 +1,11 @@
 using System.Globalization;
+using System.Text.Json.Serialization;
 
 namespace DigiPhoto.Contracts;
 
 public readonly record struct Money
 {
+    [JsonConstructor]
     public Money(long minorUnits, string currency)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(currency);

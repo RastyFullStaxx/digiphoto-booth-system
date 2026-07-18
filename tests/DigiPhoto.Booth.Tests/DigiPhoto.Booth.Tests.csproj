@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DigiPhoto.Booth\DigiPhoto.Booth.csproj" />
+    <ProjectReference Include="..\..\src\DigiPhoto.Cloud\DigiPhoto.Cloud.csproj" />
   </ItemGroup>
 
 </Project>

@@ -27,6 +27,7 @@ captures/
 prints/
 outbox/
 tmp/
+src/DigiPhoto.Booth/data/
 
 # Secrets and local settings
 .env

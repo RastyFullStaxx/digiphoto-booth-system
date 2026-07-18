@@ -15,6 +15,23 @@ public sealed class ContractTests
         Assert.Equal("PHP", money.Currency);
     }
 
+    [Fact]
+    public void ValueContractsRoundTripThroughJson()
+    {
+        var source = new
+        {
+            Price = new Money(12_500, "php"),
+            Document = new PixelDocument(1200, 1800, 300),
+        };
+
+        var json = JsonSerializer.Serialize(source);
+        var result = JsonSerializer.Deserialize<ValueContractFixture>(json);
+
+        Assert.NotNull(result);
+        Assert.Equal(source.Price, result.Price);
+        Assert.Equal(source.Document, result.Document);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("PH")]
@@ -44,4 +61,6 @@ public sealed class ContractTests
 
         Assert.Equal("\"RecoveryRequired\"", json);
     }
+
+    private sealed record ValueContractFixture(Money Price, PixelDocument Document);
 }

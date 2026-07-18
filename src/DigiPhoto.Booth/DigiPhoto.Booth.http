@@ -1,6 +1,9 @@
-@DigiPhoto.Booth_HostAddress = http://localhost:5145
+@DigiPhoto.Booth_HostAddress = https://localhost:7250
 
-GET {{DigiPhoto.Booth_HostAddress}}/weatherforecast/
+GET {{DigiPhoto.Booth_HostAddress}}/api/v1/booth/sessions/active
 Accept: application/json
 
 ###
+
+POST {{DigiPhoto.Booth_HostAddress}}/api/v1/booth/sessions/00000000-0000-0000-0000-000000000001/payment
+Accept: application/problem+json

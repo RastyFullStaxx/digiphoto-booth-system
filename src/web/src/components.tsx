@@ -3,11 +3,7 @@ import { ArrowLeft, CheckCircle, ImageSquare, LockSimple } from '@phosphor-icons
 import type { ImgHTMLAttributes, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
-export const simulatorImages = [
-  '/simulator/capture-01.png',
-  '/simulator/capture-02.png',
-  '/simulator/capture-03.png',
-] as const
+import { simulatorImages } from './assets'
 
 export function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
