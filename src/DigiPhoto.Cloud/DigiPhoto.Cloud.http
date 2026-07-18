@@ -1,0 +1,6 @@
+@DigiPhoto.Cloud_HostAddress = http://localhost:5103
+
+GET {{DigiPhoto.Cloud_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

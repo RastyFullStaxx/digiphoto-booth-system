@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DigiPhoto.Booth/DigiPhoto.Booth.csproj" />
+    <Project Path="src/DigiPhoto.Cloud/DigiPhoto.Cloud.csproj" />
+    <Project Path="src/DigiPhoto.Contracts/DigiPhoto.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DigiPhoto.Booth.Tests/DigiPhoto.Booth.Tests.csproj" />
+    <Project Path="tests/DigiPhoto.Cloud.Tests/DigiPhoto.Cloud.Tests.csproj" />
+    <Project Path="tests/DigiPhoto.Contracts.Tests/DigiPhoto.Contracts.Tests.csproj" />
+  </Folder>
+</Solution>

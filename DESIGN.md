@@ -270,8 +270,8 @@ current, upcoming, and exception states.
 - Secondary buttons use the surface and a complete perimeter line.
 - Destructive actions use error color only at the decision point and name the object
   or consequence.
-- Default, hover on capable devices, focus-visible, pressed, disabled, loading,
-  error, and success behavior are required.
+- Focus-visible, pressed, disabled, and hover on capable devices are required.
+  Loading, error, and success apply only to asynchronous or fallible actions.
 - Press feedback is a fast `scale(0.98)` transform. Loading never changes the button
   width.
 
@@ -352,7 +352,26 @@ actions. Do not mix emoji, raster icons, and unrelated icon packs.
 Guest photos and templates are the visual content. Do not fill missing media with
 generic stock photography. Simulator fixtures must be clearly labeled as simulated
 and should exercise different orientations, skin tones, group sizes, and contrast
-conditions without pretending to be customer work.
+conditions without pretending to be customer work. They must be synthetic or
+separately consented and must never reuse production guest media.
+
+## North-Star Concepts
+
+These project-owned concepts are the selected visual direction. They are composition,
+hierarchy, density, atmosphere, and motif references—not screenshots to trace and not
+permission to rasterize UI text.
+
+- `docs/design/concepts/shutter-rail-palette.png`
+- `docs/design/concepts/guest-kiosk-live-preview.png`
+- `docs/design/concepts/tenant-operations-overview.png`
+- `docs/design/concepts/template-studio.png`
+- `docs/design/concepts/private-gallery-mobile.png`
+
+Carry forward the white/charcoal stage contrast, Shutter Rail, crop-corner motif,
+single lime primary action, calm information density, full-width operational strips,
+uncropped gallery media, and light-tool/dark-canvas editor split. Do not literalize
+generated people, event copy, sample counts, exact pixel spacing, or ornamental marks
+inside a template preview.
 
 ## Content and Terminology
 

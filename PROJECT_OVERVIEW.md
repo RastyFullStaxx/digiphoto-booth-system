@@ -55,8 +55,10 @@ deployment health, audited support access, subscriptions, and incident response.
 1. **Guest kiosk** — responsive React UI on the paired tablet or booth display.
 2. **Local operator console** — React UI hosted by the Windows booth for readiness,
    recovery, history, and protected reprints.
-3. **Template studio** — Fabric.js editor for staff-created 4x6 and paired 2x6
-   layouts, reusable assets, photo slots, masks, text, and immutable publishing.
+3. **Template studio** — authenticated tenant-portal route with a Fabric.js editor
+   for staff-created 4x6 and paired 2x6 layouts, reusable assets, photo slots, masks,
+   text, and immutable publishing. Cloud owns drafts and managed assets; booths
+   consume published versions only.
 4. **Tenant portal** — event, package, device, staff, session, payment, gallery, and
    retention administration.
 5. **Private gallery** — mobile-first bearer-link page for photo, GIF, and silent MP4
@@ -145,9 +147,12 @@ Cloud records center on `Tenant`, `Membership`, `Device`, `License`, `Event`,
 
 ## Payment model
 
-Guest payment is a per-event or per-package toggle. When active, the cloud creates a
+Guest payment uses an event-level master switch and the selected published package's
+immutable price snapshot. When active, the cloud creates a
 unique, exact-amount, five-minute PayMongo QR Ph attempt and unlocks only from a
-validated terminal webhook. Static personal QR codes cannot automate unlock.
+terminal state verified by the cloud through a signed webhook or authenticated
+provider retrieval in the correct account context. Static personal QR codes cannot
+automate unlock.
 
 Our booth initially uses our PayMongo merchant account. External SaaS tenants use
 PayMongo Linked Accounts so guest revenue stays attributed to the tenant. SaaS
@@ -158,6 +163,8 @@ launch.
 ## Privacy and security baseline
 
 - Private, revocable, non-indexed gallery per session with a random bearer token.
+- The cloud stores only the token digest and redacts raw token paths from every log
+  and telemetry sink.
 - Default 30-day media retention; only 7, 30, or 90 days are allowed.
 - Separate unchecked consent for promotional or public-display use.
 - Guardian confirmation and child-appropriate notice for minor sessions.
@@ -165,28 +172,36 @@ launch.
 - Tenant isolation in authorization, queries, tests, and storage paths.
 - MFA for portal administrators, least privilege, audited support, encrypted
   transport/storage, secure local credentials, and explicit deletion workflows.
+- Paired-tablet HTTPS, rotating device/session credentials, guest-only local
+  authorization, strict origins, and CSRF protection.
+- Durable deletion tombstones flow cloud-to-booth so an offline cache or restored
+  backup cannot resurrect expired media.
 
-The product baseline does not replace Philippine legal and DPO review. Privacy and
-child privacy impact assessments, processing agreements, incident response, and
-registration analysis are launch gates.
+The product baseline does not replace Philippine legal and DPO review. The locked
+plan's timing for privacy readiness has a proposed correction in
+`PLAN_AMENDMENT_PROPOSAL.md`; no real guest data may enter development fixtures.
 
-## First executable vertical slice
+## Execution order and first development slice
 
-The first runnable slice uses simulator drivers and proves the full shape of the
-system without pretending hardware has been certified:
+Gate A remains the first delivery milestone: prove the exact camera, printer, driver,
+media, reconnect, crop/cut, spool, and power-cycle behavior on physical hardware.
+Until that equipment is present, simulator work is a development harness—not evidence
+that Gate A passed.
 
-1. Create and publish a sample tenant, event, package, privacy notice, and template.
-2. Pair a simulated booth and download a verified event bundle.
-3. Run one free guest photo session through privacy, countdown, simulated capture,
-   selection, render, simulated print, gallery token, and local reset.
+The first simulator slice proves the local free-session semantics needed by the
+hardware harness and Gate B:
+
+1. Load a signed local fixture event bundle containing a package, privacy notice, and
+   immutable template.
+2. Pair a simulated tablet to the booth-local service.
+3. Run one free guest photo session through notice, countdown, simulated capture,
+   selection, render, simulated print, completion, and local reset.
 4. Persist every state locally, restart at selected checkpoints, and recover safely.
-5. Upload the manifest and output exactly once to the cloud.
-6. Open the private gallery on a phone-sized browser.
-7. Run a second session with payment enabled and prove success, duplicate, wrong
-   amount, expired, and offline-fail-closed cases using a fake provider adapter.
+5. Exercise print deduplication, ambiguous spool response, and operator recovery.
 
-This slice establishes the contracts and failure semantics used by real Canon, DNP,
-and PayMongo integrations later.
+Manifest upload, private cloud gallery, and fake-provider payment cases are developed
+for Gate C after the local Gate B workflow is stable. Shared contracts may be
+scaffolded earlier, but their existence is not a completed delivery gate.
 
 ## Delivery gates
 

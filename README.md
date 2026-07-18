@@ -11,6 +11,8 @@ This repository is in greenfield execution. Start with:
 - `PRODUCT.md` — users, positioning, personality, and design principles.
 - `DESIGN.md` — visual tokens, responsive behavior, components, motion, and content.
 - `AGENTS.md` — implementation invariants and repository working rules.
+- `PLAN_AMENDMENT_PROPOSAL.md` — provider/privacy corrections awaiting explicit
+  approval before the locked plan is revised.
 
 The initial runnable build uses camera, printer, and payment simulators. Physical
 Canon/DNP and PayMongo validation remain explicit delivery gates rather than claims
