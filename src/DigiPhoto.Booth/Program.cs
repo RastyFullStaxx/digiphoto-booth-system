@@ -1,41 +1,166 @@
+using DigiPhoto.Booth.Data;
+using DigiPhoto.Booth.Hardware;
+using DigiPhoto.Booth.Sessions;
+using DigiPhoto.Booth.Storage;
+using DigiPhoto.Contracts.Events;
+using DigiPhoto.Contracts.Sessions;
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+var databasePath = Path.GetFullPath(
+    builder.Configuration["Booth:DatabasePath"] ?? "data/booth.db",
+    builder.Environment.ContentRootPath);
+var storageRoot = Path.GetFullPath(
+    builder.Configuration["Booth:StorageRoot"] ?? "data/media",
+    builder.Environment.ContentRootPath);
+
+Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
+
 builder.Services.AddOpenApi();
+builder.Services.AddSingleton(new BoothStorageOptions(storageRoot));
+builder.Services.AddSingleton<BoothFileStore>();
+builder.Services.AddDbContextFactory<BoothDbContext>(options =>
+    options.UseSqlite($"Data Source={databasePath}"));
+builder.Services.AddSingleton<SimulatedCameraAdapter>();
+builder.Services.AddSingleton<ICameraAdapter>(services =>
+    services.GetRequiredService<SimulatedCameraAdapter>());
+builder.Services.AddSingleton<SimulatedPrinterAdapter>();
+builder.Services.AddSingleton<IPrinterAdapter>(services =>
+    services.GetRequiredService<SimulatedPrinterAdapter>());
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<BoothWorkflow>();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
 
+app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
+{
+    var exception = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
+    var (status, title) = exception switch
+    {
+        KeyNotFoundException => (StatusCodes.Status404NotFound, "Session not found"),
+        ArgumentException => (StatusCodes.Status400BadRequest, "Invalid request"),
+        BoothWorkflowException => (StatusCodes.Status409Conflict, "Session cannot advance"),
+        _ => (StatusCodes.Status500InternalServerError, "The booth could not complete the request"),
+    };
+
+    await Results.Problem(
+        statusCode: status,
+        title: title,
+        detail: status == StatusCodes.Status500InternalServerError ? null : exception?.Message)
+        .ExecuteAsync(context);
+}));
 app.UseHttpsRedirection();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+var booth = app.MapGroup("/api/v1/booth");
 
-app.MapGet("/weatherforecast", () =>
+booth.MapGet("/sessions/active", async (BoothWorkflow workflow, CancellationToken cancellationToken) =>
+    await workflow.GetActiveAsync(cancellationToken));
+
+booth.MapGet("/sessions/{sessionId:guid}", async (
+    Guid sessionId,
+    BoothWorkflow workflow,
+    CancellationToken cancellationToken) =>
+    await workflow.GetAsync(sessionId, cancellationToken));
+
+booth.MapPost("/sessions", async (
+    StartSessionRequest request,
+    BoothWorkflow workflow,
+    CancellationToken cancellationToken) =>
+    Results.Created(
+        $"/api/v1/booth/sessions/{request.SessionId}",
+        await workflow.StartAsync(request, cancellationToken)));
+
+booth.MapPost("/sessions/{sessionId:guid}/begin", async (
+    Guid sessionId,
+    BoothWorkflow workflow,
+    CancellationToken cancellationToken) =>
+    await workflow.BeginPackageSelectionAsync(sessionId, cancellationToken));
+
+booth.MapPost("/sessions/{sessionId:guid}/package", async (
+    Guid sessionId,
+    SelectPackageRequest request,
+    BoothWorkflow workflow,
+    CancellationToken cancellationToken) =>
+    await workflow.SelectPackageAsync(sessionId, request.Package, cancellationToken));
+
+booth.MapPost("/sessions/{sessionId:guid}/privacy", async (
+    Guid sessionId,
+    PrivacyRecord privacy,
+    BoothWorkflow workflow,
+    CancellationToken cancellationToken) =>
+    await workflow.AcceptPrivacyAsync(sessionId, privacy, cancellationToken));
+
+booth.MapPost("/sessions/{sessionId:guid}/countdown", async (
+    Guid sessionId,
+    BoothWorkflow workflow,
+    CancellationToken cancellationToken) =>
+    await workflow.StartCountdownAsync(sessionId, cancellationToken));
+
+booth.MapPost("/sessions/{sessionId:guid}/capture", async (
+    Guid sessionId,
+    BoothWorkflow workflow,
+    CancellationToken cancellationToken) =>
+    await workflow.CaptureAsync(sessionId, cancellationToken));
+
+booth.MapPost("/sessions/{sessionId:guid}/review", async (
+    Guid sessionId,
+    BoothWorkflow workflow,
+    CancellationToken cancellationToken) =>
+    await workflow.AcceptReviewAsync(sessionId, cancellationToken));
+
+booth.MapPost("/sessions/{sessionId:guid}/render", async (
+    Guid sessionId,
+    HttpRequest request,
+    BoothWorkflow workflow,
+    CancellationToken cancellationToken) =>
 {
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+    if (!request.ContentType?.StartsWith("image/png", StringComparison.OrdinalIgnoreCase) ?? true)
+    {
+        throw new ArgumentException("The rendered output must be sent as image/png bytes.");
+    }
+
+    return await workflow.PersistRenderAsync(sessionId, request.Body, cancellationToken);
+});
+
+booth.MapPost("/sessions/{sessionId:guid}/print", async (
+    Guid sessionId,
+    BoothWorkflow workflow,
+    CancellationToken cancellationToken) =>
+    await workflow.SubmitPrintAsync(sessionId, cancellationToken));
+
+booth.MapPost("/sessions/{sessionId:guid}/resolve-print", async (
+    Guid sessionId,
+    ResolvePrintRequest request,
+    BoothWorkflow workflow,
+    CancellationToken cancellationToken) =>
+    await workflow.ResolvePrintAsync(sessionId, request.Resolution, cancellationToken));
+
+booth.MapPost("/sessions/{sessionId:guid}/reset", async (
+    Guid sessionId,
+    BoothWorkflow workflow,
+    CancellationToken cancellationToken) =>
+    await workflow.ResetAsync(sessionId, cancellationToken));
+
+booth.MapPost("/sessions/{sessionId:guid}/payment", () => Results.Problem(
+    statusCode: StatusCodes.Status501NotImplemented,
+    title: "Guest payment is not enabled",
+    detail: "This simulator slice cannot verify payment and never unlocks a session from this endpoint."));
+
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<BoothDbContext>>();
+    await using var database = await factory.CreateDbContextAsync();
+    await database.Database.EnsureCreatedAsync();
+}
+
+await app.Services.GetRequiredService<BoothWorkflow>().RecoverActiveAsync();
 
 app.Run();
 
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
+public partial class Program;

@@ -1,1 +1,42 @@
 AGENTS.md
+
+# .NET
+**/bin/
+**/obj/
+*.user
+*.suo
+TestResults/
+coverage/
+
+# Node and browser tooling
+**/node_modules/
+**/dist/
+**/.vite/
+playwright-report/
+test-results/
+.playwright-mcp/
+
+# Local runtime state and guest media
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+captures/
+prints/
+outbox/
+tmp/
+
+# Secrets and local settings
+.env
+.env.*
+!.env.example
+appsettings.*.local.json
+secrets.json
+
+# Operating-system and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
