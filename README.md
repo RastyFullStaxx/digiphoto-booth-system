@@ -1,0 +1,2 @@
+# digiphoto-booth-system
+
