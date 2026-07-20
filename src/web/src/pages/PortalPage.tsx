@@ -20,6 +20,15 @@ import type { Icon } from '@phosphor-icons/react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BrandMark, DemoMediaNotice, PageBackLink, StatusLabel } from '../components'
+import {
+  demoPackageSnapshots,
+  loadDemoEventPaymentSettings,
+  saveDemoEventPaymentSettings,
+  type DemoEventPaymentSettings,
+} from '../demoEventSettings'
+
+const currentEventId = '11111111-1111-4111-8111-111111111112'
+const phpCurrency = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' })
 
 const navigation: Array<{ label: string; icon: Icon; path?: string }> = [
   { label: 'Overview', icon: House, path: '/portal' },
@@ -74,6 +83,17 @@ function PortalNavigation() {
 export function PortalPage() {
   const [eventOpen, setEventOpen] = useState(false)
   const [printWarning, setPrintWarning] = useState(false)
+  const [paymentSettings, setPaymentSettings] = useState(() => loadDemoEventPaymentSettings(currentEventId))
+  const [paymentSaveStatus, setPaymentSaveStatus] = useState('Saved locally in this browser.')
+
+  const updatePaymentSettings = (next: DemoEventPaymentSettings) => {
+    setPaymentSettings(next)
+    setPaymentSaveStatus(
+      saveDemoEventPaymentSettings(next)
+        ? 'Saved locally in this browser.'
+        : 'Could not save locally. The payment gate remains off after reload.',
+    )
+  }
 
   return (
     <div className="portal">
@@ -123,10 +143,54 @@ export function PortalPage() {
               <dl>
                 <div><dt>Package</dt><dd>Classic photo strip</dd></div>
                 <div><dt>Retention</dt><dd>30 days</dd></div>
-                <div><dt>Payment</dt><dd>Off for this event</dd></div>
+                <div>
+                  <dt>Payment</dt>
+                  <dd>{paymentSettings.paymentQrEnabled ? 'Demo setting on · published package prices' : 'Off for this event'}</dd>
+                </div>
                 <div><dt>Template</dt><dd>Modern Strip v3</dd></div>
               </dl>
               <Link className="text-action" to="/templates/editor">Edit draft template <ArrowRight aria-hidden="true" size={18} /></Link>
+
+              <section className="event-payment-demo" aria-labelledby="event-payment-demo-heading">
+                <div className="event-payment-demo__header">
+                  <div>
+                    <span className="event-payment-demo__eyebrow">Simulation only</span>
+                    <h3 id="event-payment-demo-heading">Unsupervised payment QR</h3>
+                  </div>
+                  <label className="event-payment-demo__toggle">
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      aria-label="Enable unsupervised payment QR demo"
+                      checked={paymentSettings.paymentQrEnabled}
+                      aria-describedby="event-payment-demo-description event-payment-demo-safety"
+                      onChange={(event) => updatePaymentSettings({
+                        ...paymentSettings,
+                        paymentQrEnabled: event.currentTarget.checked,
+                      })}
+                    />
+                    <span>{paymentSettings.paymentQrEnabled ? 'Demo setting on' : 'Off'}</span>
+                  </label>
+                </div>
+
+                <p id="event-payment-demo-description" className="event-payment-demo__notice">
+                  This turns the kiosk's non-scannable payment gate demo on. It accepts no money and never calls PayMongo.
+                </p>
+
+                {paymentSettings.paymentQrEnabled ? (
+                  <div className="event-payment-demo__amount" aria-label="Published package snapshot prices">
+                    <span>Published package snapshot prices</span>
+                    {demoPackageSnapshots.map((item) => (
+                      <small key={item.versionId}>{item.title} · {item.priceMinor.toLocaleString('en-PH')} minor units · {phpCurrency.format(item.priceMinor / 100)}</small>
+                    ))}
+                  </div>
+                ) : null}
+
+                <p id="event-payment-demo-safety" className="event-payment-demo__safety">
+                  A production gate must fail closed: continue only after the cloud verifies a terminal payment for the correct event, amount, currency, and tenant.
+                </p>
+                <p className="event-payment-demo__status" role="status">{paymentSaveStatus}</p>
+              </section>
             </section>
           ) : null}
 

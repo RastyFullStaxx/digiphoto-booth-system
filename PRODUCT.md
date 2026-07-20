@@ -42,10 +42,12 @@ from shutter to print to private QR delivery.
 
 ## Brand Personality
 
-Confident, celebratory, precise.
+Cozy, celebratory, precise.
 
-The guest experience is energetic without being childish and warm without being
-chatty. The operator and owner experiences are calm, explicit, and trustworthy.
+Machi Studio (`まちスタジオ`) is the tenant-facing brand. Its capybara character,
+soft blush palette, and keepsake-stationery cues make the guest experience warm
+without making important controls childish or chatty. The operator and owner
+experiences are calm, explicit, and trustworthy.
 Copy uses short active sentences, names the real action, and becomes serious—not
 humorous—during payment, privacy, printing, or recovery problems.
 
@@ -53,8 +55,8 @@ humorous—during payment, privacy, printing, or recovery problems.
 
 - A casino-like vending kiosk full of flashing choices, countdown anxiety, and
   unclear payment states.
-- A generic wedding collage app with script fonts, pink gradients, hearts, and
-  decorative frames baked into the product shell.
+- A generic wedding collage app where pink gradients, script type, hearts, or mascot
+  art compete with privacy, payment, capture, print, or recovery controls.
 - A sci-fi dark control room that makes routine operator work feel dangerous or
   technical for its own sake.
 - A Canva clone that exposes unrestricted editing to guests and hides print safety

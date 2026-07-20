@@ -25,10 +25,11 @@ import {
   Textbox,
 } from 'fabric'
 import type { FabricObject } from 'fabric'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { simulatorImages } from '../assets'
 import { BrandMark, DemoMediaNotice, SimulatedPhoto } from '../components'
+import { hasSupportedArtworkSignature, maxTemplateArtworkBytes } from '../templateArtwork'
 
 type EditorObject = FabricObject & {
   layerId?: string
@@ -52,6 +53,9 @@ type SelectionDetails = LayerItem & {
 
 type EditorPanel = 'assets' | 'properties' | 'layers'
 type DraftStatus = 'loading' | 'saved' | 'saving' | 'publishing' | 'published' | 'error'
+type ArtworkImportStatus = 'idle' | 'loading' | 'success' | 'error'
+
+const localArtworkAssetId = 'local-demo:flattened-strip'
 
 let editorObjectSequence = 0
 
@@ -102,7 +106,7 @@ function EditorPhoneReview() {
       </div>
       <dl>
         <div><dt>Output</dt><dd>Paired 2x6 on 4x6</dd></div>
-        <div><dt>Draft</dt><dd>Cloud draft, unpublished</dd></div>
+        <div><dt>Draft</dt><dd>Local demo, not persisted</dd></div>
         <div><dt>Print safety</dt><dd>Safe area valid</dd></div>
       </dl>
       <Link className="button button--secondary" to="/portal">Return to operations</Link>
@@ -117,6 +121,7 @@ export function TemplateEditorPage() {
   const historyIndexRef = useRef(-1)
   const suppressHistoryRef = useRef(false)
   const saveTimerRef = useRef<number | null>(null)
+  const artworkObjectUrlsRef = useRef(new Set<string>())
   const [layers, setLayers] = useState<LayerItem[]>([])
   const [selection, setSelection] = useState<SelectionDetails | null>(null)
   const [historyIndex, setHistoryIndex] = useState(-1)
@@ -125,6 +130,11 @@ export function TemplateEditorPage() {
   const [previewMode, setPreviewMode] = useState(false)
   const [previewUrl, setPreviewUrl] = useState('')
   const [activePanel, setActivePanel] = useState<EditorPanel>('assets')
+  const [hasLocalArtwork, setHasLocalArtwork] = useState(false)
+  const [artworkImport, setArtworkImport] = useState<{ status: ArtworkImportStatus; message: string }>({
+    status: 'idle',
+    message: '',
+  })
 
   const syncLayers = useCallback((canvas: Canvas) => {
     const nextLayers = canvas
@@ -134,6 +144,9 @@ export function TemplateEditorPage() {
       .reverse()
       .map(({ id, name, locked, visible }) => ({ id, name, locked, visible }))
     setLayers(nextLayers)
+    setHasLocalArtwork(canvas
+      .getObjects()
+      .some((object) => (object as EditorObject).managedAssetId === localArtworkAssetId))
 
     const active = canvas.getActiveObject() as EditorObject | undefined
     setSelection(active ? describeObject(active) : null)
@@ -170,6 +183,7 @@ export function TemplateEditorPage() {
     }
 
     const abortController = new AbortController()
+    const artworkObjectUrls = artworkObjectUrlsRef.current
     const canvas = new Canvas(canvasElement, {
       width: 200,
       height: 600,
@@ -325,6 +339,8 @@ export function TemplateEditorPage() {
       if (saveTimerRef.current !== null) {
         window.clearTimeout(saveTimerRef.current)
       }
+      artworkObjectUrls.forEach((url) => URL.revokeObjectURL(url))
+      artworkObjectUrls.clear()
       fabricCanvasRef.current = null
       void canvas.dispose()
     }
@@ -357,6 +373,95 @@ export function TemplateEditorPage() {
     canvas.add(image)
     canvas.setActiveObject(image)
     finishCanvasChange(canvas)
+  }
+
+  async function importFlattenedArtwork(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget
+    const file = input.files?.[0]
+    const canvas = fabricCanvasRef.current
+    if (!file || !canvas) {
+      return
+    }
+
+    setArtworkImport({ status: 'loading', message: 'Checking artwork…' })
+    let objectUrl = ''
+
+    try {
+      if (file.size > maxTemplateArtworkBytes) {
+        setArtworkImport({
+          status: 'error',
+          message: 'Artwork is larger than 15 MB. Export a flattened 600 × 1800 PNG, JPEG, or WebP under 15 MB.',
+        })
+        return
+      }
+
+      if (!await hasSupportedArtworkSignature(file)) {
+        setArtworkImport({
+          status: 'error',
+          message: 'Choose a real PNG, JPEG, or WebP file. SVG, PDF, and other formats are not accepted.',
+        })
+        return
+      }
+
+      objectUrl = URL.createObjectURL(file)
+      const image = await FabricImage.fromURL(objectUrl)
+      if (image.width !== 600 || image.height !== 1800) {
+        URL.revokeObjectURL(objectUrl)
+        objectUrl = ''
+        setArtworkImport({
+          status: 'error',
+          message: `Artwork is ${image.width} × ${image.height} px. Use exactly 600 × 1800 px.`,
+        })
+        return
+      }
+
+      const priorArtwork = canvas
+        .getObjects()
+        .find((object) => (object as EditorObject).managedAssetId === localArtworkAssetId)
+      if (priorArtwork) {
+        canvas.remove(priorArtwork)
+      }
+
+      image.set({
+        left: 0,
+        top: 0,
+        originX: 'left',
+        originY: 'top',
+        scaleX: 1 / 3,
+        scaleY: 1 / 3,
+        selectable: false,
+        evented: false,
+        hasControls: false,
+        lockMovementX: true,
+        lockMovementY: true,
+        lockScalingX: true,
+        lockScalingY: true,
+        lockRotation: true,
+      })
+      assignLayer(image as EditorObject, 'Local artwork background', localArtworkAssetId)
+      canvas.insertAt(0, image)
+
+      // Fabric history snapshots retain the blob URL, so keep it alive until editor teardown.
+      artworkObjectUrlsRef.current.add(objectUrl)
+      objectUrl = ''
+      canvas.requestRenderAll()
+      syncLayers(canvas)
+      recordHistory(canvas)
+      setArtworkImport({
+        status: 'success',
+        message: `${file.name} is loaded in this local demo only. It was not uploaded or saved.`,
+      })
+    } catch {
+      setArtworkImport({
+        status: 'error',
+        message: 'That artwork could not be decoded. Choose a valid PNG, JPEG, or WebP file.',
+      })
+    } finally {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl)
+      }
+      input.value = ''
+    }
   }
 
   function addText() {
@@ -535,12 +640,12 @@ export function TemplateEditorPage() {
   }
 
   const statusCopy: Record<DraftStatus, string> = {
-    loading: 'Loading managed assets',
-    saved: 'Draft saved to cloud boundary',
-    saving: 'Saving cloud draft',
-    publishing: 'Publishing immutable version',
-    published: 'Published as Modern Strip v4',
-    error: 'Managed assets unavailable',
+    loading: 'Loading demo assets',
+    saved: 'Local demo draft ready',
+    saving: 'Saving local demo draft',
+    publishing: 'Simulating immutable publish',
+    published: 'Publish simulated - no cloud',
+    error: 'Demo assets unavailable',
   }
 
   return (
@@ -562,11 +667,11 @@ export function TemplateEditorPage() {
             <Eye aria-hidden="true" size={19} />
             {previewMode ? 'Edit template' : 'Preview paired print'}
           </button>
-          <button className="button button--secondary editor-save-button" type="button" onClick={queueDraftSave} disabled={draftStatus === 'saving'}>
-            Save draft
+          <button className="button button--secondary editor-save-button" type="button" onClick={queueDraftSave} disabled={draftStatus === 'saving' || hasLocalArtwork} aria-describedby={hasLocalArtwork ? 'local-artwork-boundary' : undefined}>
+            Save demo draft
           </button>
-          <button className="button button--primary" type="button" onClick={publishDraft} disabled={draftStatus === 'publishing' || draftStatus === 'loading' || draftStatus === 'error'}>
-            Publish
+          <button className="button button--primary" type="button" onClick={publishDraft} disabled={draftStatus === 'publishing' || draftStatus === 'loading' || draftStatus === 'error' || hasLocalArtwork} aria-describedby={hasLocalArtwork ? 'local-artwork-boundary' : undefined}>
+            Simulate publish
           </button>
         </div>
       </header>
@@ -592,6 +697,27 @@ export function TemplateEditorPage() {
           </div>
           <div className="managed-assets">
             <h3>Managed assets</h3>
+            <label htmlFor="local-template-artwork">
+              <strong>Import flattened strip</strong>
+              <small>Local demo only · PNG, JPEG, or WebP · exactly 600 × 1800 px · 15 MB maximum · not uploaded or saved</small>
+            </label>
+            <input
+              id="local-template-artwork"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+              onChange={(event) => void importFlattenedArtwork(event)}
+            />
+            {artworkImport.message ? (
+              <p
+                role={artworkImport.status === 'error' ? 'alert' : 'status'}
+                aria-live={artworkImport.status === 'error' ? 'assertive' : 'polite'}
+              >
+                {artworkImport.message}
+              </p>
+            ) : null}
+            {hasLocalArtwork ? (
+              <p id="local-artwork-boundary" role="status">Save and simulated publish stay disabled while local artwork is present because it has not been converted to a managed cloud asset.</p>
+            ) : null}
             <button type="button" onClick={addManagedPhoto}>
               <SimulatedPhoto source={simulatorImages[0]} alt="Synthetic managed asset thumbnail" />
               <span><strong>Event guests 01</strong><small>PNG, simulator fixture</small></span>

@@ -16,6 +16,7 @@ This repository is in greenfield execution. Start with:
 - `docs/operations/development.md` — exact simulator setup, run, smoke, and safety
   instructions.
 
-The initial runnable build uses camera, printer, and payment simulators. Physical
-Canon/DNP and PayMongo validation remain explicit delivery gates rather than claims
-made from simulated behavior.
+The initial runnable build has executable camera and printer simulators plus an
+explicitly browser-only payment-gate demo. Physical Canon/DNP proof, real PayMongo
+validation, and cloud-wired template publication remain delivery gates rather than
+claims made from simulated behavior.

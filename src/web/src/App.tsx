@@ -4,6 +4,7 @@ import { GalleryPage } from './pages/GalleryPage'
 import { HomePage } from './pages/HomePage'
 import { KioskPage } from './pages/KioskPage'
 import { PortalPage } from './pages/PortalPage'
+import { CapybaraLoader } from './components'
 
 const TemplateEditorPage = lazy(async () => {
   const module = await import('./pages/TemplateEditorPage')
@@ -19,7 +20,7 @@ export function AppRoutes() {
       <Route
         path="/templates/editor"
         element={(
-          <Suspense fallback={<main id="main-content" className="route-loading" aria-live="polite">Loading Template Studio...</main>}>
+          <Suspense fallback={<main id="main-content" className="route-loading" aria-live="polite"><CapybaraLoader compact label="Opening Template Studio" /></main>}>
             <TemplateEditorPage />
           </Suspense>
         )}

@@ -1,9 +1,10 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AppRoutes } from './App'
+import { hasSupportedArtworkSignature } from './templateArtwork'
 
 function renderRoute(path: string) {
   return render(
@@ -20,10 +21,15 @@ async function reachPrivacy(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe('DigiPhoto demo routes', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
   it('introduces each product surface from the demo home', () => {
     renderRoute('/')
 
-    expect(screen.getByRole('heading', { name: /Follow the session from shutter to private gallery/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /A cozy photo moment, handled with studio precision/i })).toBeInTheDocument()
+    expect(screen.getByText('まちスタジオ')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Guest kiosk/i })).toHaveAttribute('href', '/kiosk')
     expect(screen.getByRole('link', { name: /Operations overview/i })).toHaveAttribute('href', '/portal')
     expect(screen.getByRole('link', { name: /Template Studio/i })).toHaveAttribute('href', '/templates/editor')
@@ -68,6 +74,73 @@ describe('DigiPhoto demo routes', () => {
 
     expect(await screen.findByRole('heading', { name: 'Keep this photo?' }, { timeout: 2_500 })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Use this photo/i })).toBeInTheDocument()
+  })
+
+  it('keeps the optional payment demo fail-closed until explicit simulated verification', async () => {
+    const user = userEvent.setup()
+    const portal = renderRoute('/portal')
+
+    await user.click(screen.getByRole('button', { name: 'Open event' }))
+    await user.click(screen.getByRole('switch', { name: 'Enable unsupervised payment QR demo' }))
+    expect(screen.getByRole('switch', { name: 'Enable unsupervised payment QR demo' })).toBeChecked()
+    portal.unmount()
+
+    await reachPrivacy(user)
+    await user.click(screen.getByRole('checkbox', { name: /I have read the privacy notice/i }))
+    await user.click(screen.getByRole('radio', { name: /No, everyone is 18 or older/i }))
+    await user.click(screen.getByRole('button', { name: /Continue to payment/i }))
+
+    expect(screen.getByRole('heading', { name: 'Payment verification demo' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Look at the camera' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Simulate cloud-verified payment' }))
+    expect(await screen.findByRole('heading', { name: 'Look at the camera' }, { timeout: 2_500 })).toBeInTheDocument()
+  })
+
+  it('takes the demo payment amount from the selected published package snapshot', async () => {
+    const user = userEvent.setup()
+    const portal = renderRoute('/portal')
+
+    await user.click(screen.getByRole('button', { name: 'Open event' }))
+    await user.click(screen.getByRole('switch', { name: 'Enable unsupervised payment QR demo' }))
+    portal.unmount()
+
+    renderRoute('/kiosk')
+    await user.click(screen.getByRole('button', { name: 'Start session' }))
+    expect(screen.getByText(/₱150\.00 for the selected published package/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: /4x6 portrait/i }))
+    expect(screen.getByText(/₱200\.00 for the selected published package/i)).toBeInTheDocument()
+  })
+
+  it('finishes a three-photo demo with the capybara process and Done reset', async () => {
+    const user = userEvent.setup()
+    await reachPrivacy(user)
+    await user.click(screen.getByRole('checkbox', { name: /I have read the privacy notice/i }))
+    await user.click(screen.getByRole('radio', { name: /No, everyone is 18 or older/i }))
+    await user.click(screen.getByRole('button', { name: /Continue to camera/i }))
+
+    for (let shot = 0; shot < 3; shot += 1) {
+      await user.click(screen.getByRole('button', { name: 'Take photo' }))
+      expect(await screen.findByRole('heading', { name: 'Keep this photo?' }, { timeout: 2_500 })).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: /Use this photo/i }))
+    }
+
+    expect(screen.getByText('Machi is preparing your keepsake')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Your print is on the way' }, { timeout: 4_000 })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    expect(screen.getByRole('heading', { name: 'Ready for your photo?' })).toBeInTheDocument()
+  }, 15_000)
+
+  it('accepts only real PNG, JPEG, or WebP artwork signatures', async () => {
+    const png = new File(
+      [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])],
+      'strip.png',
+      { type: 'image/png' },
+    )
+    const renamedSvg = new File(['<svg></svg>'], 'strip.png', { type: 'image/png' })
+
+    expect(await hasSupportedArtworkSignature(png)).toBe(true)
+    expect(await hasSupportedArtworkSignature(renamedSvg)).toBe(false)
   })
 
   it('exposes recoverable print ambiguity without automatic reprint', async () => {

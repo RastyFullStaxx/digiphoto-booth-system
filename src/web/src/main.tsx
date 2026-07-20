@@ -10,7 +10,7 @@ import './styles.css'
 const root = document.getElementById('root')
 
 if (!root) {
-  throw new Error('DigiPhoto could not find its application root.')
+  throw new Error('Machi Studio could not find its application root.')
 }
 
 createRoot(root).render(

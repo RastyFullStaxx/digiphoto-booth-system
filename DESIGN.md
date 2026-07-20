@@ -1,29 +1,29 @@
 ---
 version: alpha
-name: Shutter Rail
-description: A high-contrast product system inspired by contact sheets, viewfinders, and reliable studio equipment.
+name: Machi Shutter Rail
+description: A cozy, high-contrast Machi Studio system built from keepsake stationery, contact sheets, viewfinders, and reliable studio equipment.
 colors:
-  canvas: "oklch(1 0 0)"
-  surface: "oklch(0.965 0.006 113)"
-  surface-raised: "oklch(0.992 0.002 113)"
-  surface-strong: "oklch(0.925 0.012 113)"
-  ink: "oklch(0.18 0.018 113)"
-  ink-muted: "oklch(0.43 0.025 113)"
-  line: "oklch(0.84 0.018 113)"
-  primary: "oklch(0.82 0.16 113)"
-  primary-hover: "oklch(0.77 0.17 113)"
-  primary-pressed: "oklch(0.72 0.16 113)"
-  on-primary: "oklch(0.18 0.018 113)"
-  accent: "oklch(0.62 0.19 28)"
+  canvas: "oklch(0.995 0.006 20)"
+  surface: "oklch(0.965 0.018 20)"
+  surface-raised: "oklch(0.987 0.009 20)"
+  surface-strong: "oklch(0.925 0.035 18)"
+  ink: "oklch(0.24 0.045 38)"
+  ink-muted: "oklch(0.43 0.035 35)"
+  line: "oklch(0.84 0.035 18)"
+  primary: "oklch(0.56 0.19 10)"
+  primary-hover: "oklch(0.51 0.19 10)"
+  primary-pressed: "oklch(0.47 0.18 10)"
+  on-primary: "oklch(0.99 0.005 20)"
+  accent: "oklch(0.61 0.16 25)"
   on-accent: "oklch(1 0 0)"
-  viewfinder: "oklch(0.12 0.01 113)"
-  viewfinder-raised: "oklch(0.19 0.014 113)"
-  on-viewfinder: "oklch(0.97 0.006 113)"
+  viewfinder: "oklch(0.16 0.025 38)"
+  viewfinder-raised: "oklch(0.22 0.03 38)"
+  on-viewfinder: "oklch(0.98 0.008 20)"
   success: "oklch(0.56 0.145 145)"
   warning: "oklch(0.74 0.15 78)"
   error: "oklch(0.56 0.185 25)"
   info: "oklch(0.57 0.135 245)"
-  focus: "oklch(0.62 0.19 28)"
+  focus: "oklch(0.5 0.2 10)"
 typography:
   kiosk-display:
     fontFamily: "Manrope Variable, Manrope, sans-serif"
@@ -126,7 +126,7 @@ components:
     padding: 1.5rem
 ---
 
-# Shutter Rail Design System
+# Machi Shutter Rail Design System
 
 ## Overview
 
@@ -135,16 +135,20 @@ a photographer watches a Windows console nearby and needs calm, trustworthy stat
 That scene calls for a light, high-contrast interface with a dark live-view stage—not
 an all-dark tool and not a decorative wedding theme.
 
+Machi Studio adds a soft blush keepsake atmosphere and a capybara guide without
+turning privacy, payment, camera, print, or recovery screens into decoration.
+
 The visual identity combines three familiar pieces of photographic equipment:
 
 - the ordered rhythm of a contact sheet;
 - the confident crop corners of a camera viewfinder;
 - the durable, labeled controls of studio hardware.
 
-The system should feel confident, celebratory, and precise. The guest surface is
-spacious and directional. The operator, portal, and editor surfaces are denser and
-quiet. Event themes may replace guest background media and selected brand accents,
-but system, payment, privacy, warning, focus, and recovery semantics remain protected.
+The system should feel cozy, celebratory, and precise. The guest surface is spacious
+and directional. The operator, portal, and editor surfaces are denser and quiet. The
+wordmark is `Machi Studio` with `まちスタジオ` directly below it. Event themes may
+replace guest background media and selected brand accents, but system, payment,
+privacy, warning, focus, and recovery semantics remain protected.
 
 The signature move is the **Shutter Rail**: an ordered strip of shot or workflow
 frames that fills as work becomes safely persisted. It is functional wayfinding, not
@@ -156,14 +160,13 @@ The strategy is restrained: neutral architecture carries the product and color i
 spent on actions and state. All implementation colors use the normative OKLCH tokens
 in the frontmatter.
 
-- **Canvas:** literal white keeps text and photography honest in unpredictable event
-  lighting.
-- **Ink:** a brand-hued near-black provides strong readability without blue-gray SaaS
-  sameness.
-- **Shutter lime:** the primary action and ready state. It appears on one dominant
-  action or current selection per screen, not as decoration.
-- **Flash coral:** focus, capture emphasis, and rare celebratory accents. It must not
-  replace semantic error red.
+- **Canvas:** a near-white blush-neutral keeps text and photography honest in
+  unpredictable event lighting without washing the whole product pink.
+- **Ink:** deep cocoa provides readable warmth without blue-gray SaaS sameness.
+- **Machi strawberry:** the primary action and current state. It appears on one
+  dominant action or selection per screen, not as decoration.
+- **Blush:** a quiet surface and illustration field, never a substitute for semantic
+  success, warning, or error colors.
 - **Viewfinder:** the dark stage behind live preview, media, and editor canvas. Dark
   surfaces are local to image work rather than the whole application.
 - **Semantic colors:** success, warning, error, and info always pair color with an
@@ -184,9 +187,10 @@ use the larger fixed kiosk display role because it is read at arm's length; port
 headings do not use fluid marketing scales. Body copy stays at 1rem or larger and is
 limited to 65–72 characters where it forms prose.
 
-Use sentence case. Do not use script fonts, decorative display faces, gradient text,
-or tiny uppercase eyebrows. Frame numbers such as `SHOT 2 / 3` may use the technical
-face and modest tracking because they represent actual sequence metadata.
+Use sentence case. App controls do not use script fonts, decorative display faces,
+gradient text, or tiny uppercase eyebrows. The Japanese brand subline remains real
+text rather than a rasterized label. Frame numbers such as `SHOT 2 / 3` may use the
+technical face and modest tracking because they represent actual sequence metadata.
 
 ## Layout
 
@@ -266,7 +270,7 @@ current, upcoming, and exception states.
 
 ### Buttons
 
-- One filled shutter-lime primary action per decision screen.
+- One filled Machi-strawberry primary action per decision screen.
 - Secondary buttons use the surface and a complete perimeter line.
 - Destructive actions use error color only at the decision point and name the object
   or consequence.
@@ -279,7 +283,7 @@ current, upcoming, and exception states.
 
 The rail represents real ordered work: session steps, required shots, upload items,
 or print jobs. Each item contains a number or short label, an icon, and accessible
-state text. Current state uses shutter lime; completed state uses ink/success with a
+state text. Current state uses Machi strawberry; completed state uses ink/success with a
 check; exceptions use semantic color and action text. It must remain understandable
 in monochrome and to screen readers.
 
@@ -320,8 +324,9 @@ outside the canvas.
 
 ## Motion
 
-Motion weighting is **Emil Kowalski primary, Jakub Krehel secondary, and Jhey
-Tompkins selective** for rare guest completion moments. The frequency gate applies
+Motion weighting is **Jakub Krehel primary, Emil Kowalski secondary, and Jhey
+Tompkins selective** for rare guest processing and completion moments. The frequency
+gate applies
 first: high-frequency editing, keyboard commands, and operator scanning are instant
 or nearly instant.
 
@@ -338,6 +343,13 @@ The signature guest feedback is a short capture confirmation: a bounded white fl
 or clip-path shutter blink followed by the new frame entering the Shutter Rail. It
 confirms that the image was persisted; it does not delay the next step. Reduced
 motion replaces it with an immediate state and live-region message.
+
+During the short processing state, a four-frame capybara GIF shows camera, flash,
+print, and finished-strip continuity. It exists only while work is pending; completion
+uses a still frame, and `prefers-reduced-motion` selects the still fallback.
+The completion keepsake panel uses the project-owned transparent watercolor scene at
+`src/web/public/brand/capybara-printer-scene-trimmed.png`; it is decorative support
+for the print status and never replaces the live status text or actions.
 
 There is no page-load choreography, ambient pulsing, looping attention animation,
 parallax, elastic motion, or decorative scroll reveal. GIF and MP4 media provide
@@ -361,14 +373,23 @@ These project-owned concepts are the selected visual direction. They are composi
 hierarchy, density, atmosphere, and motif references—not screenshots to trace and not
 permission to rasterize UI text.
 
+The guest experience has one explicit fidelity exception:
+`docs/design/concepts/machi-studio-guest-completion.png` is the authoritative visual
+composition for the kiosk masthead, icon progress rail, dark viewfinder, contact-sheet
+strip, watercolor keepsake panel, outlined gallery action, and oversized strawberry
+**Done** action. Implement those relationships closely in semantic UI. Adapt only the
+locked three-shot count, optional Payment step, privacy timer, responsive reflow, and
+accessibility requirements; never rasterize interface text or controls.
+
 - `docs/design/concepts/shutter-rail-palette.png`
 - `docs/design/concepts/guest-kiosk-live-preview.png`
 - `docs/design/concepts/tenant-operations-overview.png`
 - `docs/design/concepts/template-studio.png`
 - `docs/design/concepts/private-gallery-mobile.png`
+- `docs/design/concepts/machi-studio-guest-completion.png`
 
 Carry forward the white/charcoal stage contrast, Shutter Rail, crop-corner motif,
-single lime primary action, calm information density, full-width operational strips,
+single strawberry primary action, calm information density, full-width operational strips,
 uncropped gallery media, and light-tool/dark-canvas editor split. Do not literalize
 generated people, event copy, sample counts, exact pixel spacing, or ornamental marks
 inside a template preview.
@@ -379,8 +400,8 @@ Use these terms consistently: **event**, **package**, **template**, **shot**,
 **session**, **output**, **print**, **private gallery**, **booth**, and **device**.
 
 Buttons use specific verb-plus-object labels: `Start session`, `Take photo`,
-`Use this photo`, `Print 2 copies`, `Open private gallery`, `Retry upload`, and
-`Keep session`. Avoid `OK`, `Submit`, `Yes`, `No`, `Click here`, and unexplained
+`Use this photo`, `Print 2 copies`, `Open private gallery`, `Retry upload`, `Done`,
+and `Keep session`. Avoid `OK`, `Submit`, `Yes`, `No`, `Click here`, and unexplained
 technical errors.
 
 Payment and privacy language is factual and calm. Errors answer what happened, why
@@ -405,7 +426,7 @@ is ambiguous, or when media might be at risk.
 ## Do's and Don'ts
 
 - Do make the current state and one safe next action obvious.
-- Do reserve shutter lime for primary action, ready state, and current selection.
+- Do reserve Machi strawberry for the primary action and current selection.
 - Do let event media and templates provide personality inside protected system UI.
 - Do use the Shutter Rail only for real sequence or progress information.
 - Do verify typography, contrast, and real content at every target viewport.

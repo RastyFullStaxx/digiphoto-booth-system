@@ -17,7 +17,7 @@ import {
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { simulatorImages } from '../assets'
-import { DemoMediaNotice, PrivacyBadge, SimulatedPhoto } from '../components'
+import { BrandMark, DemoMediaNotice, PrivacyBadge, SimulatedPhoto } from '../components'
 
 type GalleryMedia = 'photo' | 'gif' | 'video'
 type CopyStatus = 'idle' | 'copied' | 'failed'
@@ -46,7 +46,7 @@ export function GalleryPage() {
         <Link className="icon-button" to="/" aria-label="Back to demo surfaces">
           <ArrowLeft aria-hidden="true" size={24} />
         </Link>
-        <DemoMediaNotice compact />
+        <BrandMark compact />
         <button
           className="icon-button"
           type="button"
@@ -63,6 +63,7 @@ export function GalleryPage() {
         <section className="gallery-title" aria-labelledby="gallery-heading">
           <h1 id="gallery-heading">Mara &amp; Nico</h1>
           <PrivacyBadge />
+          <DemoMediaNotice compact />
         </section>
 
         {detailsOpen ? (
@@ -74,7 +75,7 @@ export function GalleryPage() {
 
         <section className="gallery-media" id="gallery-output" aria-label={`${media} output`}>
           <SimulatedPhoto
-            className={media === 'gif' && playing ? 'gallery-media__image gallery-media__image--motion' : 'gallery-media__image'}
+            className={media !== 'photo' && playing ? 'gallery-media__image gallery-media__image--motion' : 'gallery-media__image'}
             source={selectedSource}
             alt={`Synthetic simulator ${media} output featuring three fictional adult guests`}
           />
@@ -88,21 +89,21 @@ export function GalleryPage() {
 
         <div className="gallery-tabs" role="group" aria-label="Output type">
           <button type="button" aria-pressed={media === 'photo'} aria-controls="gallery-output" onClick={() => { setMedia('photo'); setPlaying(false) }}>
-            <Images aria-hidden="true" size={22} />
-            Photo
+            <SimulatedPhoto className="gallery-tabs__thumb" source={simulatorImages[0]} alt="" aria-hidden="true" />
+            <span><Images aria-hidden="true" size={20} />Photo</span>
           </button>
           <button type="button" aria-pressed={media === 'gif'} aria-controls="gallery-output" onClick={() => { setMedia('gif'); setPlaying(false) }}>
-            <FilmStrip aria-hidden="true" size={22} />
-            GIF
+            <SimulatedPhoto className="gallery-tabs__thumb" source={simulatorImages[1]} alt="" aria-hidden="true" />
+            <span><FilmStrip aria-hidden="true" size={20} />GIF</span>
           </button>
           <button type="button" aria-pressed={media === 'video'} aria-controls="gallery-output" onClick={() => { setMedia('video'); setPlaying(false) }}>
-            <VideoCamera aria-hidden="true" size={22} />
-            Video
+            <SimulatedPhoto className="gallery-tabs__thumb" source={simulatorImages[2]} alt="" aria-hidden="true" />
+            <span><VideoCamera aria-hidden="true" size={20} />Video</span>
           </button>
         </div>
 
         <div className="gallery-actions">
-          <a className="button button--primary button--kiosk" href={selectedSource} download={`digiphoto-demo-${media}.png`}>
+          <a className="button button--primary button--kiosk" href={selectedSource} download={`machi-studio-demo-${media}.png`}>
             <DownloadSimple aria-hidden="true" size={24} />
             Download {media}
           </a>

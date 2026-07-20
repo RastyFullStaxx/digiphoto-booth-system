@@ -5,12 +5,48 @@ import { Link } from 'react-router-dom'
 
 import { simulatorImages } from './assets'
 
-export function BrandMark({ compact = false }: { compact?: boolean }) {
-  return (
-    <Link className="brand-mark" to="/" aria-label="DigiPhoto demo surfaces">
-      <span className="brand-mark__name">DigiPhoto</span>
-      {compact ? null : <span className="brand-mark__product">Booth System</span>}
+export function BrandMark({ compact = false, linked = true }: { compact?: boolean; linked?: boolean }) {
+  const className = `brand-mark${compact ? ' brand-mark--compact' : ''}`
+  const content = (
+    <>
+      <span className="brand-mark__name">Machi Studio</span>
+      <span className="brand-mark__japanese" lang="ja">まちスタジオ</span>
+      {compact ? null : <span className="brand-mark__product">Photo booth system</span>}
+    </>
+  )
+
+  return linked ? (
+    <Link className={className} to="/" aria-label="Machi Studio demo surfaces">
+      {content}
     </Link>
+  ) : (
+    <span className={className} aria-label="Machi Studio">
+      {content}
+    </span>
+  )
+}
+
+export function CapybaraLoader({
+  label = 'Preparing your keepsake',
+  animated = true,
+  compact = false,
+}: {
+  label?: string
+  animated?: boolean
+  compact?: boolean
+}) {
+  return (
+    <figure className={`capybara-loader${compact ? ' capybara-loader--compact' : ''}`}>
+      {animated ? (
+        <picture>
+          <source media="(prefers-reduced-motion: reduce)" srcSet="/brand/capybara-loading-still.png" />
+          <img src="/brand/capybara-loading.gif" width="320" height="320" alt="" aria-hidden="true" />
+        </picture>
+      ) : (
+        <img src="/brand/capybara-loading-still.png" width="320" height="320" alt="" aria-hidden="true" />
+      )}
+      {label ? <figcaption>{label}</figcaption> : null}
+    </figure>
   )
 }
 

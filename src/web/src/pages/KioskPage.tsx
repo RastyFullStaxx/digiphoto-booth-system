@@ -3,90 +3,126 @@ import {
   Camera,
   Check,
   CheckCircle,
+  CloudCheck,
   ClockCounterClockwise,
-  DownloadSimple,
+  Heart,
   Images,
   LockKey,
   Printer,
+  QrCode,
   ShieldCheck,
-  Sparkle,
   UserFocus,
   UsersThree,
   WifiHigh,
 } from '@phosphor-icons/react'
+import {
+  Album2Line,
+  Camera2Line,
+  CheckLine as CozyCheck,
+  PrintLine,
+  QrcodeLine,
+  SafeShield2Line,
+  Sparkles2Line,
+} from '@mingcute/react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { simulatorImages } from '../assets'
 import {
+  BrandMark,
+  CapybaraLoader,
   CropFrame,
-  DemoMediaNotice,
-  PageBackLink,
   SimulatedPhoto,
   StatusLabel,
 } from '../components'
+import {
+  demoPackageSnapshots,
+  loadDemoEventPaymentSettings,
+  type DemoPackageId,
+  type DemoPackageSnapshot,
+} from '../demoEventSettings'
 
 type KioskStep =
   | 'attract'
   | 'package'
   | 'privacy'
+  | 'payment'
   | 'preview'
   | 'countdown'
   | 'review'
   | 'processing'
   | 'complete'
 
-type PackageId = 'strip' | 'classic'
 type MinorAnswer = 'yes' | 'no' | ''
 type PhotoFilter = 'original' | 'black-and-white'
 
-const workflow = ['Choose', 'Privacy', 'Capture', 'Print', 'Gallery'] as const
-
-const workflowIndex: Record<KioskStep, number> = {
+const freeWorkflow = ['Choose', 'Privacy', 'Capture', 'Print', 'Complete'] as const
+const paidWorkflow = ['Choose', 'Privacy', 'Payment', 'Capture', 'Print', 'Complete'] as const
+const freeWorkflowIndex: Record<KioskStep, number> = {
   attract: -1,
   package: 0,
   privacy: 1,
+  payment: 1,
   preview: 2,
   countdown: 2,
   review: 2,
   processing: 3,
   complete: 4,
 }
+const paidWorkflowIndex: Record<KioskStep, number> = {
+  attract: -1,
+  package: 0,
+  privacy: 1,
+  payment: 2,
+  preview: 3,
+  countdown: 3,
+  review: 3,
+  processing: 4,
+  complete: 5,
+}
 
-const packages = [
-  {
-    id: 'strip' as const,
-    title: 'Classic photo strip',
-    detail: 'Three photos, paired 2x6 strips, 2 copies',
-    icon: Images,
-  },
-  {
-    id: 'classic' as const,
-    title: '4x6 portrait',
-    detail: 'Three photos in one 4x6 layout, 1 copy',
-    icon: UserFocus,
-  },
-]
+const currentEventId = '11111111-1111-4111-8111-111111111112'
+const phpCurrency = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' })
+
+const packageIcons = { strip: Images, classic: UserFocus } as const
+const packages = demoPackageSnapshots.map((snapshot) => ({
+  ...snapshot,
+  icon: packageIcons[snapshot.id],
+}))
 
 const processingSteps = [
-  { label: 'Output saved', detail: 'Final PNG persisted locally' },
-  { label: 'Print queued', detail: 'Simulated printer accepted one job' },
-  { label: 'Gallery prepared', detail: 'Private demo link is ready' },
+  { label: 'Session captures ready', detail: 'Three selected photos are staged locally' },
+  { label: 'Print queue simulated', detail: 'No physical printer is connected' },
+  { label: 'Gallery demo ready', detail: 'A private demo route is prepared' },
 ]
 
-function WorkflowRail({ step }: { step: KioskStep }) {
-  const current = workflowIndex[step]
+const workflowIcons = {
+  Choose: Album2Line,
+  Privacy: SafeShield2Line,
+  Payment: QrcodeLine,
+  Capture: Camera2Line,
+  Print: PrintLine,
+  Complete: Sparkles2Line,
+} as const
+
+function WorkflowRail({ step, paymentEnabled }: { step: KioskStep; paymentEnabled: boolean }) {
+  const workflow = paymentEnabled ? paidWorkflow : freeWorkflow
+  const current = paymentEnabled ? paidWorkflowIndex[step] : freeWorkflowIndex[step]
 
   return (
     <nav className="workflow-rail" aria-label="Session progress">
-      <ol>
+      <ol className={paymentEnabled ? 'workflow-rail__list workflow-rail__list--paid' : 'workflow-rail__list'}>
         {workflow.map((label, index) => {
           const state = index < current ? 'complete' : index === current ? 'current' : 'upcoming'
+          const StepIcon = workflowIcons[label]
           return (
             <li className={`workflow-rail__item workflow-rail__item--${state}`} key={label}>
-              <span className="workflow-rail__marker" aria-hidden="true">
-                {state === 'complete' ? <Check size={16} weight="bold" /> : index + 1}
+              <span className="workflow-rail__icon" aria-hidden="true">
+                <StepIcon size={26} />
               </span>
-              <span>{label}</span>
+              <span className="workflow-rail__marker" aria-hidden="true">
+                {state === 'complete' ? <CozyCheck size={16} /> : index + 1}
+              </span>
+              <span className="workflow-rail__label">{label}</span>
               <small>{state}</small>
               {state === 'current' ? <span className="visually-hidden" aria-current="step">Current step</span> : null}
             </li>
@@ -107,7 +143,7 @@ function ShotRail({ captures, current }: { captures: ReadonlyArray<string>; curr
       <ol>
         {[0, 1, 2].map((index) => {
           const source = captures[index]
-          const state = source ? 'complete' : index === current ? 'current' : 'upcoming'
+          const state = index === current ? 'current' : source ? 'complete' : 'upcoming'
           return (
             <li className={`shot-rail__frame shot-rail__frame--${state}`} key={index}>
               <span className="shot-rail__number">{source ? <Check size={14} weight="bold" /> : index + 1}</span>
@@ -125,27 +161,39 @@ function ShotRail({ captures, current }: { captures: ReadonlyArray<string>; curr
   )
 }
 
-function PrintSheet({ packageId, captures }: { packageId: PackageId; captures: ReadonlyArray<string> }) {
-  const sheetImages = captures.length === 0 ? simulatorImages : captures
-
+function KeepsakeStage({ captures, selectedPackage }: { captures: ReadonlyArray<string>; selectedPackage: DemoPackageSnapshot }) {
+  const stageSource = captures[captures.length - 1] ?? simulatorImages[0]
   return (
-    <div className={`print-sheet print-sheet--${packageId}`} aria-label="Simulated final print output">
-      <div className="print-sheet__photos">
-        {sheetImages.slice(0, 3).map((source, index) => (
-          <SimulatedPhoto source={source} alt={`Synthetic output photo ${index + 1}`} key={`${source}-${index}`} />
-        ))}
-      </div>
-      <div className="print-sheet__footer">
-        <strong>Mara &amp; Nico</strong>
-        <span>July 19, 2026</span>
-      </div>
-    </div>
+    <figure className="keepsake-stage">
+      <CropFrame className="keepsake-stage__viewfinder">
+        {selectedPackage.id === 'strip' ? (
+          <SimulatedPhoto source={stageSource} alt="Synthetic selected photo from this demo session" />
+        ) : (
+          <div className="keepsake-portrait-proof" role="img" aria-label="Simulated 4x6 portrait sheet using the three selected photos">
+            <div className="keepsake-portrait-proof__sheet">
+              <div className="keepsake-portrait-proof__photos">
+                {captures.slice(0, 3).map((source, index) => (
+                  <SimulatedPhoto source={source} alt={`Synthetic output photo ${index + 1}`} key={`${source}-${index}`} />
+                ))}
+              </div>
+              <strong>Mara &amp; Nico</strong>
+              <span>July 19, 2026</span>
+            </div>
+          </div>
+        )}
+      </CropFrame>
+      <ShotRail captures={captures} current={Math.max(0, captures.length - 1)} />
+      <figcaption className="visually-hidden">
+        <span>Session viewfinder with the three selected captures. Print package queued: {selectedPackage.outputLabel}.</span>
+        <strong>{selectedPackage.copies} simulated {selectedPackage.copies === 1 ? 'copy' : 'copies'}</strong>
+      </figcaption>
+    </figure>
   )
 }
 
 export function KioskPage() {
   const [step, setStep] = useState<KioskStep>('attract')
-  const [packageId, setPackageId] = useState<PackageId>('strip')
+  const [packageId, setPackageId] = useState<DemoPackageId>('strip')
   const [minorAnswer, setMinorAnswer] = useState<MinorAnswer>('')
   const [noticeConfirmed, setNoticeConfirmed] = useState(false)
   const [guardianConfirmed, setGuardianConfirmed] = useState(false)
@@ -156,9 +204,12 @@ export function KioskPage() {
   const [countdown, setCountdown] = useState(3)
   const [processIndex, setProcessIndex] = useState(0)
   const [completionSeconds, setCompletionSeconds] = useState(45)
+  const [paymentSettings] = useState(() => loadDemoEventPaymentSettings(currentEventId))
+  const [paymentStatus, setPaymentStatus] = useState<'awaiting' | 'verifying' | 'verified'>('awaiting')
 
   const currentCapture = simulatorImages[Math.min(captures.length, simulatorImages.length - 1)]
   const selectedPackage = packages.find((item) => item.id === packageId) ?? packages[0]
+  const paymentRequired = paymentSettings.paymentQrEnabled && selectedPackage.priceMinor > 0
 
   const resetSession = useCallback(() => {
     setStep('attract')
@@ -173,6 +224,7 @@ export function KioskPage() {
     setCountdown(3)
     setProcessIndex(0)
     setCompletionSeconds(45)
+    setPaymentStatus('awaiting')
     window.scrollTo({ top: 0, behavior: 'auto' })
   }, [])
 
@@ -191,6 +243,22 @@ export function KioskPage() {
 
     return () => window.clearTimeout(timer)
   }, [countdown, step])
+
+  useEffect(() => {
+    if (step !== 'payment' || paymentStatus === 'awaiting') {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      if (paymentStatus === 'verifying') {
+        setPaymentStatus('verified')
+        return
+      }
+      setStep('preview')
+    }, paymentStatus === 'verifying' ? 800 : 420)
+
+    return () => window.clearTimeout(timer)
+  }, [paymentStatus, step])
 
   useEffect(() => {
     if (step !== 'processing') {
@@ -246,7 +314,7 @@ export function KioskPage() {
       return
     }
     setPrivacyError('')
-    setStep('preview')
+    setStep(paymentRequired ? 'payment' : 'preview')
   }
 
   function takePhoto() {
@@ -268,24 +336,21 @@ export function KioskPage() {
 
   return (
     <div className={`kiosk kiosk--${step}`}>
-      <header className="kiosk__topbar">
-        <div>
-          <PageBackLink />
-          <strong>Mara &amp; Nico</strong>
+      <header className={`kiosk__topbar${step === 'attract' ? ' kiosk__topbar--attract' : ' kiosk__topbar--session'}`}>
+        <div className="kiosk__identity">
+          <BrandMark linked={false} />
         </div>
-        {step === 'attract' ? <DemoMediaNotice compact /> : <span className="kiosk__session-code">FREE DEMO SESSION</span>}
+        {step === 'attract' ? null : <WorkflowRail step={step} paymentEnabled={paymentRequired} />}
       </header>
-
-      {step === 'attract' ? null : <WorkflowRail step={step} />}
 
       <main id="main-content" className="kiosk__main">
         {step === 'attract' ? (
-          <section className="attract-screen" aria-labelledby="attract-heading">
+          <section className="attract-screen kiosk-step" aria-labelledby="attract-heading">
             <CropFrame className="attract-screen__media">
               <SimulatedPhoto />
-              <DemoMediaNotice compact />
             </CropFrame>
             <div className="attract-screen__content">
+              <CapybaraLoader animated={false} compact label="A little keepsake, made with care" />
               <span className="event-date">July 19, 2026</span>
               <h1 id="attract-heading">Ready for your photo?</h1>
               <p>Three quick shots, a printed keepsake, and a private gallery for your phone.</p>
@@ -299,10 +364,16 @@ export function KioskPage() {
         ) : null}
 
         {step === 'package' ? (
-          <section className="decision-screen" aria-labelledby="package-heading">
+          <section className="decision-screen kiosk-step" aria-labelledby="package-heading">
             <div className="decision-screen__copy">
               <h1 id="package-heading">Choose your print</h1>
-              <p>This event is free. Payment is not part of this session.</p>
+              <p>
+                {paymentRequired
+                  ? `${phpCurrency.format(selectedPackage.priceMinor / 100)} for the selected published package. The payment demo appears after privacy and accepts no money.`
+                  : paymentSettings.paymentQrEnabled
+                    ? 'This published package has no charge, so the payment step is skipped.'
+                  : 'This event is free. Payment is not part of this session.'}
+              </p>
             </div>
             <fieldset className="selection-list">
               <legend className="visually-hidden">Print package</legend>
@@ -320,7 +391,7 @@ export function KioskPage() {
                   </span>
                   <span className="selection-option__copy">
                     <strong>{title}</strong>
-                    <small>{detail}</small>
+                    <small>{detail}{paymentSettings.paymentQrEnabled ? ` · ${phpCurrency.format((packages.find((item) => item.id === id)?.priceMinor ?? 0) / 100)}` : ''}</small>
                   </span>
                   <span className="selection-option__check" aria-hidden="true">
                     <Check size={18} weight="bold" />
@@ -341,14 +412,14 @@ export function KioskPage() {
         ) : null}
 
         {step === 'privacy' ? (
-          <section className="privacy-screen" aria-labelledby="privacy-heading">
+          <section className="privacy-screen kiosk-step" aria-labelledby="privacy-heading">
             <div className="privacy-screen__notice">
               <div className="privacy-screen__icon">
                 <ShieldCheck aria-hidden="true" size={34} />
               </div>
               <h1 id="privacy-heading">Your photos stay private</h1>
               <p>
-                DigiPhoto uses your photos to create this output, print it, and deliver a private gallery. Media is deleted after 30 days.
+                Machi Studio uses your photos to create this output, print it, and deliver a private gallery. Media is deleted after 30 days.
               </p>
               <ul>
                 <li>Anyone with the private link can view the gallery.</li>
@@ -439,7 +510,7 @@ export function KioskPage() {
                   Back to packages
                 </button>
                 <button className="button button--primary button--kiosk" type="submit">
-                  Continue to camera
+                  {paymentRequired ? 'Continue to payment' : 'Continue to camera'}
                   <ArrowRight aria-hidden="true" size={24} />
                 </button>
               </div>
@@ -447,13 +518,59 @@ export function KioskPage() {
           </section>
         ) : null}
 
+        {step === 'payment' ? (
+          <section className="payment-screen kiosk-step" aria-labelledby="payment-heading">
+            <div className="payment-screen__summary">
+              <span className="payment-screen__icon"><QrCode aria-hidden="true" size={36} /></span>
+              <h1 id="payment-heading">Payment verification demo</h1>
+              <p>
+                Amount due: <strong>{phpCurrency.format(selectedPackage.priceMinor / 100)}</strong> for {selectedPackage.title}. This marker is intentionally non-scannable and never accepts money.
+              </p>
+              <div className="demo-payment-qr" role="img" aria-label="Non-scannable payment demo marker">
+                <QrCode aria-hidden="true" size={120} weight="thin" />
+                <strong>DEMO ONLY</strong>
+              </div>
+              <small>Production will create a dynamic PayMongo QR for this exact session and amount.</small>
+            </div>
+
+            <aside className="payment-screen__actions">
+              <CloudCheck aria-hidden="true" size={48} />
+              <h2>Wait for verified payment</h2>
+              <p>Scanning a QR, showing a screenshot, or returning from a payment page cannot unlock the booth.</p>
+              <div className={`payment-verification payment-verification--${paymentStatus}`} role="status" aria-live="polite">
+                <CheckCircle aria-hidden="true" size={24} />
+                <span>
+                  <strong>{paymentStatus === 'awaiting' ? 'Awaiting demo verification' : paymentStatus === 'verifying' ? 'Checking simulated cloud state' : 'Demo payment verified'}</strong>
+                  <small>{paymentStatus === 'verified' ? 'Continuing to the camera.' : 'No provider request or money transfer occurs.'}</small>
+                </span>
+              </div>
+              <button
+                className="button button--secondary button--kiosk"
+                type="button"
+                disabled={paymentStatus !== 'awaiting'}
+                onClick={() => setStep('privacy')}
+              >
+                Back to privacy
+              </button>
+              <button
+                className="button button--primary button--kiosk"
+                type="button"
+                disabled={paymentStatus !== 'awaiting'}
+                onClick={() => setPaymentStatus('verifying')}
+              >
+                <CloudCheck aria-hidden="true" size={24} />
+                {paymentStatus === 'awaiting' ? 'Simulate cloud-verified payment' : paymentStatus === 'verifying' ? 'Verifying demo payment' : 'Payment verified'}
+              </button>
+            </aside>
+          </section>
+        ) : null}
+
         {step === 'preview' || step === 'countdown' ? (
-          <section className="capture-screen" aria-labelledby="capture-heading">
+          <section className="capture-screen kiosk-step" aria-labelledby="capture-heading">
             <div className="capture-screen__stage-column">
               <CropFrame className="viewfinder-stage">
                 <SimulatedPhoto className="viewfinder-stage__mirrored" source={currentCapture} />
                 <span className="viewfinder-stage__focus" aria-hidden="true" />
-                <DemoMediaNotice compact />
                 <span className="viewfinder-stage__mirror">Mirrored preview</span>
                 {step === 'countdown' ? (
                   <div className="countdown-overlay" aria-live="assertive" aria-label={`Photo in ${countdown}`}>
@@ -466,7 +583,9 @@ export function KioskPage() {
             </div>
 
             <aside className="capture-screen__actions">
-              <Camera aria-hidden="true" className="capture-screen__camera-icon" size={48} />
+              <div className="capture-guide" aria-hidden="true">
+                <CapybaraLoader animated label="" />
+              </div>
               <h1 id="capture-heading">Look at the camera</h1>
               <p>{step === 'countdown' ? 'The photo will save automatically.' : 'The camera simulator is ready.'}</p>
               <button
@@ -490,16 +609,17 @@ export function KioskPage() {
         ) : null}
 
         {step === 'review' ? (
-          <section className="review-screen" aria-labelledby="review-heading">
+          <section className="review-screen kiosk-step" aria-labelledby="review-heading">
             <div className="review-screen__stage-column">
               <CropFrame className={`review-stage${filter === 'black-and-white' ? ' review-stage--bw' : ''}`}>
                 <SimulatedPhoto source={currentCapture} />
-                <DemoMediaNotice compact />
               </CropFrame>
               <ShotRail captures={captures} current={captures.length} />
             </div>
             <aside className="review-screen__actions">
-              <CheckCircle aria-hidden="true" size={46} />
+              <div className="capture-guide" aria-hidden="true">
+                <CapybaraLoader animated label="" />
+              </div>
               <h1 id="review-heading">Keep this photo?</h1>
               <p>Your original capture stays unchanged. The filter only affects this output.</p>
               <fieldset className="filter-choice">
@@ -527,72 +647,78 @@ export function KioskPage() {
                   </label>
                 </div>
               </fieldset>
-              <button className="button button--primary button--kiosk" type="button" onClick={keepPhoto}>
-                Use this photo
-                <ArrowRight aria-hidden="true" size={24} />
-              </button>
               <button className="button button--secondary button--kiosk" type="button" onClick={() => setStep('preview')}>
                 <ClockCounterClockwise aria-hidden="true" size={22} />
                 Retake photo
+              </button>
+              <button className="button button--primary button--kiosk" type="button" onClick={keepPhoto}>
+                Use this photo
+                <ArrowRight aria-hidden="true" size={24} />
               </button>
             </aside>
           </section>
         ) : null}
 
         {step === 'processing' ? (
-          <section className="processing-screen" aria-labelledby="processing-heading">
-            <div className="processing-screen__preview">
-              <PrintSheet packageId={packageId} captures={captures} />
-            </div>
-            <div className="processing-screen__status">
-              <Printer aria-hidden="true" size={48} />
-              <h1 id="processing-heading">Preparing your print</h1>
-              <p>Each stage completes only after the simulator persists its result.</p>
-              <ol aria-live="polite">
-                {processingSteps.map((item, index) => {
-                  const state = index < processIndex ? 'complete' : index === processIndex ? 'current' : 'upcoming'
-                  return (
-                    <li className={`process-step process-step--${state}`} key={item.label}>
-                      <span aria-hidden="true">{state === 'complete' ? <Check size={18} weight="bold" /> : index + 1}</span>
-                      <div>
-                        <strong>{item.label}</strong>
-                        <small>{item.detail}</small>
-                      </div>
-                      <em>{state}</em>
-                    </li>
-                  )
-                })}
-              </ol>
-              <span className="visually-hidden" role="status">
-                {processIndex < processingSteps.length ? processingSteps[processIndex].label : 'All processing steps complete'}
-              </span>
+          <section className="keepsake-screen keepsake-screen--processing kiosk-step" aria-labelledby="processing-heading">
+            <KeepsakeStage captures={captures} selectedPackage={selectedPackage} />
+            <div className="keepsake-screen__panel">
+              <header className="keepsake-screen__header">
+                <h1 id="processing-heading">Preparing your keepsake</h1>
+                <span className="keepsake-screen__rule" aria-hidden="true">
+                  <span />
+                  <Heart size={20} weight="fill" />
+                  <span />
+                </span>
+                <p>Machi is getting everything ready</p>
+              </header>
+              <CapybaraLoader label="Machi is preparing your keepsake" />
+              <div className="keepsake-progress" role="status" aria-live="polite">
+                <span aria-hidden="true">0{Math.min(processIndex + 1, processingSteps.length)}</span>
+                <div>
+                  <strong>{processingSteps[processIndex]?.label ?? 'Finishing up'}</strong>
+                  <small>{processingSteps[processIndex]?.detail ?? 'Your keepsake is ready'}</small>
+                </div>
+              </div>
             </div>
           </section>
         ) : null}
 
         {step === 'complete' ? (
-          <section className="completion-screen" aria-labelledby="completion-heading">
-            <div className="completion-screen__output">
-              <PrintSheet packageId={packageId} captures={captures} />
-            </div>
-            <div className="completion-screen__content">
-              <Sparkle aria-hidden="true" className="completion-screen__spark" size={50} />
-              <h1 id="completion-heading">Your print is on the way</h1>
-              <p>Open your private gallery now, or scan the demo marker on another screen.</p>
-              <div className="demo-qr" role="img" aria-label="Simulated QR marker. Use Open private gallery to continue.">
-                <span>DEMO</span>
-              </div>
-              <Link className="button button--primary button--kiosk" to="/g/demo">
-                <DownloadSimple aria-hidden="true" size={24} />
-                Open private gallery
-              </Link>
-              <button className="button button--secondary button--kiosk" type="button" onClick={resetSession}>
-                Finish and reset booth
-              </button>
-              <div className="completion-screen__timer" role="status">
-                <LockKey aria-hidden="true" size={20} />
-                <span>Session resets in {completionSeconds} seconds</span>
-                <button type="button" onClick={() => setCompletionSeconds(90)}>Add more time</button>
+          <section className="keepsake-screen keepsake-screen--complete kiosk-step" aria-labelledby="completion-heading">
+            <KeepsakeStage captures={captures} selectedPackage={selectedPackage} />
+            <div className="keepsake-screen__panel">
+              <header className="keepsake-screen__header">
+                <span className="keepsake-screen__eyebrow">Preparing your keepsake</span>
+                <span className="keepsake-screen__rule" aria-hidden="true">
+                  <span />
+                  <Heart size={20} weight="fill" />
+                  <span />
+                </span>
+                <h1 id="completion-heading">Your print is on the way</h1>
+              </header>
+              <img
+                className="keepsake-screen__art"
+                src="/brand/capybara-printer-scene-trimmed.png"
+                width="1162"
+                height="764"
+                alt="Watercolor Machi capybaras beside a pink photo printer"
+              />
+              <p className="keepsake-screen__delivery-note">{selectedPackage.title} · {selectedPackage.copies} {selectedPackage.copies === 1 ? 'copy' : 'copies'} · private demo gallery ready on this device.</p>
+              <div className="keepsake-screen__actions">
+                <Link className="button button--secondary button--kiosk" to="/g/demo">
+                  <Images aria-hidden="true" size={28} />
+                  Open private gallery
+                </Link>
+                <button className="button button--primary button--kiosk completion-screen__done" type="button" onClick={resetSession}>
+                  <CheckCircle aria-hidden="true" size={34} />
+                  Done
+                </button>
+                <div className="completion-screen__timer">
+                  <LockKey aria-hidden="true" size={20} />
+                  <span>Session resets in {completionSeconds} seconds</span>
+                  <button type="button" onClick={() => setCompletionSeconds(90)}>Add more time</button>
+                </div>
               </div>
             </div>
           </section>

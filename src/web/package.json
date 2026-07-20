@@ -15,6 +15,7 @@
   "dependencies": {
     "@fontsource-variable/manrope": "^5.2.8",
     "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@mingcute/react": "^1.4.1",
     "@phosphor-icons/react": "^2.1.10",
     "fabric": "7.4.0",
     "react": "^19.2.7",

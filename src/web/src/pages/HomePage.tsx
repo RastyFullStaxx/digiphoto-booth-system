@@ -34,7 +34,7 @@ const surfaces: Array<{
   {
     path: '/templates/editor',
     title: 'Template Studio',
-    description: 'Edit a cloud draft on a real Fabric canvas and publish safely.',
+    description: 'Edit a local demo draft on a real Fabric canvas and preview publishing.',
     cue: 'Fabric 7.4.0',
     icon: Layout,
   },
@@ -61,9 +61,9 @@ export function HomePage() {
       <main id="main-content" className="demo-home__main">
         <section className="demo-home__intro" aria-labelledby="demo-heading">
           <div className="demo-home__copy">
-            <h1 id="demo-heading">Follow the session from shutter to private gallery.</h1>
+            <h1 id="demo-heading">A cozy photo moment, handled with studio precision.</h1>
             <p>
-              This simulator proves the product surfaces before camera, printer, payment, and cloud adapters are connected.
+              Follow Machi Studio from the first pose to a printed keepsake and private phone gallery.
             </p>
             <Link className="button button--primary button--large" to="/kiosk">
               Start guest demo
@@ -74,7 +74,7 @@ export function HomePage() {
           <CropFrame className="demo-home__viewfinder">
             <SimulatedPhoto />
             <DemoMediaNotice compact />
-            <span className="viewfinder-readout viewfinder-readout--left">SIMULATOR</span>
+            <span className="viewfinder-readout viewfinder-readout--left">MACHI STUDIO</span>
             <span className="viewfinder-readout viewfinder-readout--right">READY</span>
           </CropFrame>
         </section>
@@ -82,7 +82,7 @@ export function HomePage() {
         <section className="surface-index" aria-labelledby="surface-heading">
           <div className="surface-index__heading">
             <h2 id="surface-heading">Choose a product surface</h2>
-            <p>Each route is responsive and uses the same Shutter Rail visual system.</p>
+            <p>Each route uses the same cozy Machi identity and dependable Shutter Rail.</p>
           </div>
           <div className="surface-index__rows">
             {surfaces.map(({ path, title, description, cue, icon: SurfaceIcon }, index) => (
