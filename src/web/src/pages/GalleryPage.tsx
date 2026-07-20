@@ -17,7 +17,7 @@ import {
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { simulatorImages } from '../assets'
-import { BrandMark, DemoMediaNotice, PrivacyBadge, SimulatedPhoto } from '../components'
+import { BrandMark, SimulatedPhoto } from '../components'
 
 type GalleryMedia = 'photo' | 'gif' | 'video'
 type CopyStatus = 'idle' | 'copied' | 'failed'
@@ -61,9 +61,11 @@ export function GalleryPage() {
 
       <main id="main-content" className="gallery-main">
         <section className="gallery-title" aria-labelledby="gallery-heading">
-          <h1 id="gallery-heading">Mara &amp; Nico</h1>
-          <PrivacyBadge />
-          <DemoMediaNotice compact />
+          <img className="gallery-title__mascot" src="/brand/capybara-loading-still.png" alt="" aria-hidden="true" />
+          <div>
+            <h1 id="gallery-heading">Your photo keepsake</h1>
+            <p><LockSimple aria-hidden="true" size={24} />Private gallery</p>
+          </div>
         </section>
 
         {detailsOpen ? (

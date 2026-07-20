@@ -2176,17 +2176,20 @@ tbody tr:hover {
 
 .gallery-page {
   min-height: 100dvh;
-  background: var(--canvas);
+  background:
+    url('/brand/cozy-blush-cloud.png') right -7rem top -5rem / 18rem auto no-repeat,
+    url('/brand/cozy-blush-cloud.png') left -9rem bottom -7rem / 24rem auto no-repeat,
+    var(--canvas);
 }
 
 .gallery-header,
 .gallery-main {
-  width: min(100%, 46rem);
+  width: min(100%, 76rem);
   margin: 0 auto;
 }
 
 .gallery-header {
-  min-height: 5.5rem;
+  min-height: 6rem;
   display: grid;
   grid-template-columns: 2.75rem minmax(0, 1fr) 2.75rem;
   align-items: center;
@@ -2194,32 +2197,55 @@ tbody tr:hover {
   padding: 1rem clamp(1rem, 4vw, 2rem);
 }
 
-.gallery-header > .demo-media-notice {
-  justify-self: center;
+.gallery-header .brand-mark__name {
+  font-size: 1.5rem;
+}
+
+.gallery-header .brand-mark__japanese {
+  font-size: 0.6875rem;
 }
 
 .gallery-main {
-  padding: 1rem clamp(1rem, 4vw, 2rem) 4rem;
+  padding: 0.5rem clamp(1rem, 4vw, 2rem) 4rem;
 }
 
 .gallery-title {
-  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: clamp(0.75rem, 3vw, 1.25rem);
+  margin-bottom: 1.25rem;
+}
+
+.gallery-title__mascot {
+  width: clamp(4.25rem, 13vw, 6rem);
+  height: auto;
+  flex: 0 0 auto;
 }
 
 .gallery-title h1 {
-  margin-bottom: 0.75rem;
-  font-size: clamp(2.75rem, 11vw, 4.5rem);
+  margin: 0;
+  font-size: clamp(2rem, 7vw, 3.75rem);
   font-weight: 760;
   letter-spacing: -0.04em;
-  line-height: 1;
+  line-height: 1.02;
+}
+
+.gallery-title p {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.625rem 0 0;
+  color: var(--primary-pressed);
+  font-size: 1rem;
+  font-weight: 700;
 }
 
 .gallery-detail-panel {
   margin-bottom: 1.25rem;
-  padding: 1rem;
+  padding: 0.875rem 1rem;
   border: 1px solid var(--line);
   border-radius: 0.625rem;
-  background: var(--surface);
+  background: rgb(255 252 251 / 0.82);
 }
 
 .gallery-detail-panel strong {
@@ -2237,14 +2263,33 @@ tbody tr:hover {
   position: relative;
   overflow: hidden;
   aspect-ratio: 4 / 3;
-  border-radius: 1rem;
+  padding: 0.75rem;
+  border-radius: 1.25rem;
   background: var(--viewfinder);
+  box-shadow: 0 1.25rem 3rem rgb(48 20 6 / 0.16);
 }
 
 .gallery-media__image {
   width: 100%;
   height: 100%;
+  border-radius: 0.625rem;
   object-fit: contain;
+}
+
+.gallery-media::after {
+  position: absolute;
+  inset: 1.25rem;
+  background:
+    linear-gradient(var(--on-viewfinder), var(--on-viewfinder)) left top / 2rem 2px no-repeat,
+    linear-gradient(var(--on-viewfinder), var(--on-viewfinder)) left top / 2px 2rem no-repeat,
+    linear-gradient(var(--on-viewfinder), var(--on-viewfinder)) right top / 2rem 2px no-repeat,
+    linear-gradient(var(--on-viewfinder), var(--on-viewfinder)) right top / 2px 2rem no-repeat,
+    linear-gradient(var(--on-viewfinder), var(--on-viewfinder)) left bottom / 2rem 2px no-repeat,
+    linear-gradient(var(--on-viewfinder), var(--on-viewfinder)) left bottom / 2px 2rem no-repeat,
+    linear-gradient(var(--on-viewfinder), var(--on-viewfinder)) right bottom / 2rem 2px no-repeat,
+    linear-gradient(var(--on-viewfinder), var(--on-viewfinder)) right bottom / 2px 2rem no-repeat;
+  content: '';
+  pointer-events: none;
 }
 
 .gallery-media__image--motion {
@@ -2276,37 +2321,54 @@ tbody tr:hover {
 .gallery-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 1.25rem;
-  border: 1px solid var(--line-strong);
-  border-radius: 0.75rem;
-  overflow: hidden;
+  gap: 0.625rem;
+  margin-top: 1rem;
+  padding: 0.625rem;
+  border: 1px solid var(--line);
+  background: rgb(255 252 251 / 0.78);
 }
 
 .gallery-tabs button {
-  min-height: 3.75rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.75rem;
-  border-right: 1px solid var(--line-strong);
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  gap: 0.375rem;
+  padding: 0.375rem;
+  border: 1px solid var(--line);
   background: var(--canvas);
   cursor: pointer;
   font-weight: 700;
 }
 
 .gallery-tabs button:last-child {
-  border-right: 0;
+  border-right: 1px solid var(--line);
 }
 
 .gallery-tabs button[aria-pressed='true'] {
-  background: var(--primary);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary);
+  color: var(--primary-pressed);
+}
+
+.gallery-tabs__thumb {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.gallery-tabs button > span {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
 }
 
 .gallery-actions {
   display: grid;
   gap: 0.75rem;
-  margin-top: 1.5rem;
+  margin-top: 1.25rem;
 }
 
 .gallery-actions .button {
@@ -2330,8 +2392,8 @@ tbody tr:hover {
 
 .gallery-privacy {
   display: grid;
-  gap: 1rem;
-  margin-top: 2.5rem;
+  gap: 1.125rem;
+  margin-top: 2rem;
   padding-block: 1.5rem;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
@@ -2354,7 +2416,8 @@ tbody tr:hover {
 }
 
 .gallery-privacy__icon--lime {
-  background: oklch(0.94 0.08 113);
+  background: var(--brand-blush);
+  color: var(--primary-pressed);
 }
 
 .gallery-privacy__icon--coral {
@@ -3643,17 +3706,8 @@ tbody tr:hover {
     grid-template-columns: 1fr;
   }
 
-  .gallery-header > .demo-media-notice {
-    font-size: 0;
-  }
-
-  .gallery-header > .demo-media-notice svg {
-    width: 18px;
-    height: 18px;
-  }
-
   .gallery-title h1 {
-    font-size: 2.75rem;
+    font-size: clamp(2rem, 10vw, 2.75rem);
   }
 
   .gallery-media {
@@ -4286,6 +4340,17 @@ tbody tr:hover {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
+.kiosk--attract .kiosk__main {
+  display: grid;
+  place-items: center;
+  padding: clamp(0.75rem, 1.5vw, 1.5rem);
+}
+
+.kiosk--attract .attract-screen {
+  width: 100%;
+  min-height: 0;
+}
+
 .kiosk__topbar--attract,
 .kiosk__topbar--session {
   min-height: 8.75rem;
@@ -4846,75 +4911,6 @@ tbody tr:hover {
 .asset-tools > button:hover,
 .layer-row--selected {
   background: var(--brand-blush);
-}
-
-.gallery-page {
-  background:
-    radial-gradient(circle at 94% 4%, rgb(251 221 221 / 0.68) 0 7rem, transparent 7.1rem),
-    var(--canvas);
-}
-
-.gallery-media {
-  padding: 0.875rem;
-  border-radius: 1rem;
-  background: var(--viewfinder);
-  box-shadow: 0 1.25rem 3rem rgb(48 20 6 / 0.16);
-}
-
-.gallery-media__image {
-  border-radius: 0.5rem;
-  object-fit: contain;
-}
-
-.gallery-tabs {
-  gap: 0.625rem;
-  padding: 0.625rem;
-  border-color: var(--line);
-  border-radius: 0;
-  overflow: visible;
-  background: rgb(255 252 251 / 0.76);
-}
-
-.gallery-tabs button {
-  min-width: 0;
-  min-height: 0;
-  display: grid;
-  gap: 0.375rem;
-  padding: 0.375rem;
-  border: 1px solid var(--line);
-  background: var(--canvas);
-}
-
-.gallery-tabs button:last-child {
-  border-right: 1px solid var(--line);
-}
-
-.gallery-tabs button[aria-pressed='true'] {
-  border-color: var(--primary);
-  background: var(--canvas);
-  box-shadow: 0 0 0 3px var(--primary);
-  color: var(--primary-pressed);
-}
-
-.gallery-tabs__thumb {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
-  filter: grayscale(1) contrast(1.05);
-}
-
-.gallery-tabs button > span {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.375rem;
-  font-size: 0.75rem;
-}
-
-.gallery-privacy__icon--lime {
-  background: var(--brand-blush);
-  color: var(--primary-pressed);
 }
 
 @media (min-width: 72.01rem) {
