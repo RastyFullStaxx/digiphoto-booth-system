@@ -74,38 +74,44 @@ describe('DigiPhoto demo routes', () => {
 
     expect(await screen.findByRole('heading', { name: 'Keep this photo?' }, { timeout: 2_500 })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Use this photo/i })).toBeInTheDocument()
+    expect(screen.queryByRole('slider', { name: 'Brightness' })).not.toBeInTheDocument()
   })
 
-  it('applies output-only photo edits and preserves them on an accepted capture', async () => {
+  it('edits each output only after all three captures are accepted', async () => {
     const user = userEvent.setup()
     await reachPrivacy(user)
     await user.click(screen.getByRole('checkbox', { name: /I have read the privacy notice/i }))
     await user.click(screen.getByRole('radio', { name: /No, everyone is 18 or older/i }))
     await user.click(screen.getByRole('button', { name: /Continue to camera/i }))
-    await user.click(screen.getByRole('button', { name: 'Take photo' }))
-    await screen.findByRole('heading', { name: 'Keep this photo?' }, { timeout: 2_500 })
+
+    for (let shot = 0; shot < 3; shot += 1) {
+      await user.click(screen.getByRole('button', { name: 'Take photo' }))
+      await screen.findByRole('heading', { name: 'Keep this photo?' }, { timeout: 2_500 })
+      expect(screen.queryByRole('slider', { name: 'Brightness' })).not.toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: /Use this photo/i }))
+    }
+
+    expect(screen.getByRole('heading', { name: 'Finish your photos' })).toBeInTheDocument()
 
     fireEvent.change(screen.getByRole('slider', { name: 'Brightness' }), { target: { value: '20' } })
     fireEvent.change(screen.getByRole('slider', { name: 'Contrast' }), { target: { value: '-10' } })
     fireEvent.change(screen.getByRole('slider', { name: 'Exposure' }), { target: { value: '0.3' } })
-    await user.click(screen.getByRole('radio', { name: 'Black and white' }))
+    await user.click(screen.getByRole('radio', { name: 'Warm' }))
 
-    expect(screen.getByAltText(/Synthetic simulator photo of three fictional adult event guests/i)).toHaveStyle({
-      filter: 'grayscale(1) brightness(1.477) contrast(0.900)',
+    expect(screen.getByAltText('Photo 1 selected for editing')).toHaveStyle({
+      filter: 'sepia(0.18) saturate(1.18) brightness(1.477) contrast(0.900)',
     })
 
-    await user.click(screen.getByRole('button', { name: /Use this photo/i }))
-    expect(screen.getByAltText('Synthetic simulator capture 1')).toHaveStyle({
-      filter: 'grayscale(1) brightness(1.477) contrast(0.900)',
-    })
-
-    await user.click(screen.getByRole('button', { name: 'Take photo' }))
-    await screen.findByRole('heading', { name: 'Keep this photo?' }, { timeout: 2_500 })
+    await user.click(screen.getByRole('button', { name: 'Edit photo 2' }))
     expect(screen.getByRole('slider', { name: 'Brightness' })).toHaveValue('0')
     expect(screen.getByRole('slider', { name: 'Contrast' })).toHaveValue('0')
     expect(screen.getByRole('slider', { name: 'Exposure' })).toHaveValue('0')
     expect(screen.getByRole('radio', { name: 'Original' })).toBeChecked()
-  }, 10_000)
+
+    await user.click(screen.getByRole('button', { name: 'Edit photo 1' }))
+    expect(screen.getByRole('slider', { name: 'Brightness' })).toHaveValue('20')
+    expect(screen.getByRole('radio', { name: 'Warm' })).toBeChecked()
+  }, 15_000)
 
   it('keeps the optional payment demo fail-closed until explicit simulated verification', async () => {
     const user = userEvent.setup()
@@ -156,6 +162,7 @@ describe('DigiPhoto demo routes', () => {
       await user.click(screen.getByRole('button', { name: /Use this photo/i }))
     }
 
+    await user.click(screen.getByRole('button', { name: 'Finish photos' }))
     expect(screen.getByText('Machi is preparing your keepsake')).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'Your print is on the way' }, { timeout: 4_000 })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Done' }))

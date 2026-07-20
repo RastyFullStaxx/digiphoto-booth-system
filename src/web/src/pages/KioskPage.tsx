@@ -49,11 +49,12 @@ type KioskStep =
   | 'preview'
   | 'countdown'
   | 'review'
+  | 'edit'
   | 'processing'
   | 'complete'
 
 type MinorAnswer = 'yes' | 'no' | ''
-type PhotoFilter = 'original' | 'black-and-white'
+type PhotoFilter = 'original' | 'black-and-white' | 'warm' | 'cool' | 'film'
 type PhotoAdjustments = {
   brightness: number
   contrast: number
@@ -82,6 +83,7 @@ const freeWorkflowIndex: Record<KioskStep, number> = {
   preview: 2,
   countdown: 2,
   review: 2,
+  edit: 2,
   processing: 3,
   complete: 4,
 }
@@ -93,6 +95,7 @@ const paidWorkflowIndex: Record<KioskStep, number> = {
   preview: 3,
   countdown: 3,
   review: 3,
+  edit: 3,
   processing: 4,
   complete: 5,
 }
@@ -121,12 +124,28 @@ const workflowIcons = {
   Complete: Sparkles2Line,
 } as const
 
+const photoFilters: ReadonlyArray<{ value: PhotoFilter; label: string }> = [
+  { value: 'original', label: 'Original' },
+  { value: 'black-and-white', label: 'B&W' },
+  { value: 'warm', label: 'Warm' },
+  { value: 'cool', label: 'Cool' },
+  { value: 'film', label: 'Film' },
+]
+
+const photoFilterEffects: Record<PhotoFilter, string> = {
+  original: '',
+  'black-and-white': 'grayscale(1)',
+  warm: 'sepia(0.18) saturate(1.18)',
+  cool: 'saturate(0.92) hue-rotate(8deg)',
+  film: 'sepia(0.28) saturate(0.82)',
+}
+
 function photoFilterStyle(adjustments: PhotoAdjustments) {
   const outputBrightness = (1 + adjustments.brightness / 100) * (2 ** adjustments.exposure)
   const outputContrast = 1 + adjustments.contrast / 100
-  const grayscale = adjustments.filter === 'black-and-white' ? 'grayscale(1) ' : ''
+  const effect = photoFilterEffects[adjustments.filter]
 
-  return { filter: `${grayscale}brightness(${outputBrightness.toFixed(3)}) contrast(${outputContrast.toFixed(3)})` }
+  return { filter: `${effect ? `${effect} ` : ''}brightness(${outputBrightness.toFixed(3)}) contrast(${outputContrast.toFixed(3)})` }
 }
 
 function signedValue(value: number, suffix: string, digits = 0) {
@@ -199,12 +218,20 @@ function WorkflowRail({ step, paymentEnabled }: { step: KioskStep; paymentEnable
   )
 }
 
-function ShotRail({ captures, current }: { captures: ReadonlyArray<EditedCapture>; current: number }) {
+function ShotRail({
+  captures,
+  current,
+  onSelect,
+}: {
+  captures: ReadonlyArray<EditedCapture>
+  current: number
+  onSelect?: (index: number) => void
+}) {
   return (
     <section className="shot-rail" aria-labelledby="shot-rail-heading">
       <div className="shot-rail__title">
         <span id="shot-rail-heading">Shutter Rail</span>
-        <strong>Photo {Math.min(current + 1, 3)} of 3</strong>
+        <strong>{onSelect ? 'Editing' : 'Photo'} {Math.min(current + 1, 3)} of 3</strong>
       </div>
       <ol>
         {[0, 1, 2].map((index) => {
@@ -223,6 +250,15 @@ function ShotRail({ captures, current }: { captures: ReadonlyArray<EditedCapture
                 <span className="shot-rail__empty">Photo {index + 1}</span>
               )}
               <span className="visually-hidden">{state}</span>
+              {capture && onSelect ? (
+                <button
+                  className="shot-rail__select"
+                  type="button"
+                  aria-label={`Edit photo ${index + 1}`}
+                  aria-pressed={index === current}
+                  onClick={() => onSelect(index)}
+                />
+              ) : null}
             </li>
           )
         })}
@@ -282,7 +318,7 @@ export function KioskPage() {
   const [promotionConsent, setPromotionConsent] = useState(false)
   const [privacyError, setPrivacyError] = useState('')
   const [captures, setCaptures] = useState<EditedCapture[]>([])
-  const [adjustments, setAdjustments] = useState<PhotoAdjustments>({ ...defaultPhotoAdjustments })
+  const [selectedEditIndex, setSelectedEditIndex] = useState(0)
   const [countdown, setCountdown] = useState(3)
   const [processIndex, setProcessIndex] = useState(0)
   const [completionSeconds, setCompletionSeconds] = useState(45)
@@ -290,6 +326,7 @@ export function KioskPage() {
   const [paymentStatus, setPaymentStatus] = useState<'awaiting' | 'verifying' | 'verified'>('awaiting')
 
   const currentCapture = simulatorImages[Math.min(captures.length, simulatorImages.length - 1)]
+  const selectedEditCapture = captures[selectedEditIndex]
   const selectedPackage = packages.find((item) => item.id === packageId) ?? packages[0]
   const paymentRequired = paymentSettings.paymentQrEnabled && selectedPackage.priceMinor > 0
 
@@ -302,7 +339,7 @@ export function KioskPage() {
     setPromotionConsent(false)
     setPrivacyError('')
     setCaptures([])
-    setAdjustments({ ...defaultPhotoAdjustments })
+    setSelectedEditIndex(0)
     setCountdown(3)
     setProcessIndex(0)
     setCompletionSeconds(45)
@@ -405,20 +442,31 @@ export function KioskPage() {
   }
 
   function keepPhoto() {
-    const nextCaptures = [...captures, { source: currentCapture, adjustments: { ...adjustments } }]
+    const nextCaptures = [...captures, { source: currentCapture, adjustments: { ...defaultPhotoAdjustments } }]
     setCaptures(nextCaptures)
-    setAdjustments({ ...defaultPhotoAdjustments })
     if (nextCaptures.length === 3) {
-      setProcessIndex(0)
-      setStep('processing')
+      setSelectedEditIndex(0)
+      setStep('edit')
       return
     }
     setStep('preview')
   }
 
   function retakePhoto() {
-    setAdjustments({ ...defaultPhotoAdjustments })
     setStep('preview')
+  }
+
+  function updateSelectedAdjustments(update: Partial<PhotoAdjustments>) {
+    setCaptures((current) => current.map((capture, index) => (
+      index === selectedEditIndex
+        ? { ...capture, adjustments: { ...capture.adjustments, ...update } }
+        : capture
+    )))
+  }
+
+  function finishPhotoEdits() {
+    setProcessIndex(0)
+    setStep('processing')
   }
 
   return (
@@ -699,7 +747,7 @@ export function KioskPage() {
           <section className="review-screen kiosk-step" aria-labelledby="review-heading">
             <div className="review-screen__stage-column">
               <CropFrame className="review-stage">
-                <SimulatedPhoto source={currentCapture} style={photoFilterStyle(adjustments)} />
+                <SimulatedPhoto source={currentCapture} />
               </CropFrame>
               <ShotRail captures={captures} current={captures.length} />
             </div>
@@ -708,71 +756,89 @@ export function KioskPage() {
                 <CapybaraLoader animated label="" />
               </div>
               <h1 id="review-heading">Keep this photo?</h1>
-              <p>Your original stays unchanged. These edits affect only this output.</p>
-              <fieldset className="photo-adjustments">
-                <legend>Adjust photo</legend>
-                <PhotoAdjustmentControl
-                  id="photo-brightness"
-                  label="Brightness"
-                  value={adjustments.brightness}
-                  min={-25}
-                  max={25}
-                  step={1}
-                  output={signedValue(adjustments.brightness, '%')}
-                  onChange={(brightness) => setAdjustments((current) => ({ ...current, brightness }))}
-                />
-                <PhotoAdjustmentControl
-                  id="photo-contrast"
-                  label="Contrast"
-                  value={adjustments.contrast}
-                  min={-25}
-                  max={25}
-                  step={1}
-                  output={signedValue(adjustments.contrast, '%')}
-                  onChange={(contrast) => setAdjustments((current) => ({ ...current, contrast }))}
-                />
-                <PhotoAdjustmentControl
-                  id="photo-exposure"
-                  label="Exposure"
-                  value={adjustments.exposure}
-                  min={-0.5}
-                  max={0.5}
-                  step={0.1}
-                  output={signedValue(adjustments.exposure, ' EV', 1)}
-                  onChange={(exposure) => setAdjustments((current) => ({ ...current, exposure }))}
-                />
-              </fieldset>
-              <fieldset className="filter-choice">
-                <legend>Photo filter</legend>
-                <div className="segmented-choice segmented-choice--two">
-                  <label>
-                    <input
-                      type="radio"
-                      name="filter"
-                      value="original"
-                      checked={adjustments.filter === 'original'}
-                      onChange={() => setAdjustments((current) => ({ ...current, filter: 'original' }))}
-                    />
-                    <span>Original</span>
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name="filter"
-                      value="black-and-white"
-                      checked={adjustments.filter === 'black-and-white'}
-                      onChange={() => setAdjustments((current) => ({ ...current, filter: 'black-and-white' }))}
-                    />
-                    <span>Black and white</span>
-                  </label>
-                </div>
-              </fieldset>
+              <p>Review this capture now. You can edit all three photos after the set is complete.</p>
               <button className="button button--secondary button--kiosk" type="button" onClick={retakePhoto}>
                 <ClockCounterClockwise aria-hidden="true" size={22} />
                 Retake photo
               </button>
               <button className="button button--primary button--kiosk" type="button" onClick={keepPhoto}>
                 Use this photo
+                <ArrowRight aria-hidden="true" size={24} />
+              </button>
+            </aside>
+          </section>
+        ) : null}
+
+        {step === 'edit' && selectedEditCapture ? (
+          <section className="review-screen review-screen--editor kiosk-step" aria-labelledby="edit-heading">
+            <div className="review-screen__stage-column">
+              <CropFrame className="review-stage">
+                <SimulatedPhoto
+                  source={selectedEditCapture.source}
+                  style={photoFilterStyle(selectedEditCapture.adjustments)}
+                  alt={`Photo ${selectedEditIndex + 1} selected for editing`}
+                />
+              </CropFrame>
+              <ShotRail captures={captures} current={selectedEditIndex} onSelect={setSelectedEditIndex} />
+            </div>
+            <aside className="review-screen__actions">
+              <div className="capture-guide" aria-hidden="true">
+                <CapybaraLoader animated label="" />
+              </div>
+              <h1 id="edit-heading">Finish your photos</h1>
+              <p>Choose a photo below, then give its output the look you want. Originals stay unchanged.</p>
+              <fieldset className="photo-adjustments">
+                <legend>Adjust photo {selectedEditIndex + 1}</legend>
+                <PhotoAdjustmentControl
+                  id="photo-brightness"
+                  label="Brightness"
+                  value={selectedEditCapture.adjustments.brightness}
+                  min={-25}
+                  max={25}
+                  step={1}
+                  output={signedValue(selectedEditCapture.adjustments.brightness, '%')}
+                  onChange={(brightness) => updateSelectedAdjustments({ brightness })}
+                />
+                <PhotoAdjustmentControl
+                  id="photo-contrast"
+                  label="Contrast"
+                  value={selectedEditCapture.adjustments.contrast}
+                  min={-25}
+                  max={25}
+                  step={1}
+                  output={signedValue(selectedEditCapture.adjustments.contrast, '%')}
+                  onChange={(contrast) => updateSelectedAdjustments({ contrast })}
+                />
+                <PhotoAdjustmentControl
+                  id="photo-exposure"
+                  label="Exposure"
+                  value={selectedEditCapture.adjustments.exposure}
+                  min={-0.5}
+                  max={0.5}
+                  step={0.1}
+                  output={signedValue(selectedEditCapture.adjustments.exposure, ' EV', 1)}
+                  onChange={(exposure) => updateSelectedAdjustments({ exposure })}
+                />
+              </fieldset>
+              <fieldset className="filter-choice">
+                <legend>Photo filter</legend>
+                <div className="segmented-choice segmented-choice--filters">
+                  {photoFilters.map((filter) => (
+                    <label key={filter.value}>
+                      <input
+                        type="radio"
+                        name="edit-filter"
+                        value={filter.value}
+                        checked={selectedEditCapture.adjustments.filter === filter.value}
+                        onChange={() => updateSelectedAdjustments({ filter: filter.value })}
+                      />
+                      <span>{filter.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <button className="button button--primary button--kiosk" type="button" onClick={finishPhotoEdits}>
+                Finish photos
                 <ArrowRight aria-hidden="true" size={24} />
               </button>
             </aside>
