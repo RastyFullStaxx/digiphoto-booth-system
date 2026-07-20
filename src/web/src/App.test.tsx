@@ -36,6 +36,14 @@ describe('DigiPhoto demo routes', () => {
     expect(screen.getByRole('link', { name: /Private gallery/i })).toHaveAttribute('href', '/g/demo')
   })
 
+  it('keeps kiosk sound effects under guest control', async () => {
+    const user = userEvent.setup()
+    renderRoute('/kiosk')
+
+    await user.click(screen.getByRole('button', { name: 'Mute sound effects' }))
+    expect(screen.getByRole('button', { name: 'Turn sound effects on' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
   it('requires the immutable privacy notice and age answer before camera access', async () => {
     const user = userEvent.setup()
     await reachPrivacy(user)

@@ -228,7 +228,8 @@ visual/interaction harness and is not yet connected to the Cloud or Booth APIs.
 
 Run this happy path:
 
-1. Select **Start session**.
+1. Confirm the sound control can mute and restore effects. Select **Start session**
+   and listen for a soft two-note welcome cue.
 2. Choose either print package. Confirm the forward action is visually primary and
    **Start over** is secondary.
 3. On Privacy, try to continue without checking the notice or answering the minor
@@ -239,6 +240,8 @@ Run this happy path:
    In the simulator, dispatch `window.dispatchEvent(new Event('digiphoto:high-five'))`
    from DevTools for one shot, then use **Take photo** for the others. Both triggers
    must use the same countdown and review.
+   Confirm countdown ticks stay subtle, the final shutter is crisp, and accepted
+   photos use a short warm confirmation tone.
 6. Confirm the Shutter Rail advances once per accepted photo and never advances on a
    retake.
 7. In **Process**, confirm the two-minute timer, **+30 sec**, adjustments, filters,
@@ -253,6 +256,7 @@ Run this happy path:
    oversized pink **Done** action follow
    `docs/design/concepts/machi-studio-guest-completion.png`. The local gallery link
    is a demo; this screen does not claim to expose a production QR code.
+   Confirm the completion flourish plays once and does not loop.
 10. Confirm the reset timer begins at 45 seconds. Select **Add more time** and confirm
    it returns to 90 seconds without leaving the completion screen.
 11. Select **Done**. The kiosk must reset to the attract screen with no prior captures

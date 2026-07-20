@@ -12,6 +12,8 @@ import {
   Printer,
   QrCode,
   ShieldCheck,
+  SpeakerHigh,
+  SpeakerSlash,
   Timer,
   UserFocus,
   UsersThree,
@@ -67,6 +69,7 @@ type EditedCapture = {
   source: string
   adjustments: PhotoAdjustments
 }
+type KioskSfx = 'start' | 'tick' | 'shutter' | 'high-five' | 'confirm' | 'filter' | 'complete'
 
 const defaultPhotoAdjustments: PhotoAdjustments = {
   brightness: 0,
@@ -77,6 +80,7 @@ const defaultPhotoAdjustments: PhotoAdjustments = {
 
 const processTimeSeconds = 120
 const highFiveEvent = 'digiphoto:high-five'
+let kioskAudioContext: AudioContext | null = null
 const freeWorkflow = ['Choose', 'Privacy', 'Capture', 'Process', 'Print', 'Complete'] as const
 const paidWorkflow = ['Choose', 'Privacy', 'Payment', 'Capture', 'Process', 'Print', 'Complete'] as const
 const freeWorkflowIndex: Record<KioskStep, number> = {
@@ -143,6 +147,67 @@ const photoFilterEffects: Record<PhotoFilter, string> = {
   warm: 'sepia(0.18) saturate(1.18)',
   cool: 'saturate(0.92) hue-rotate(8deg)',
   film: 'sepia(0.28) saturate(0.82)',
+}
+
+function playKioskSfx(cue: KioskSfx, enabled = true) {
+  if (!enabled || typeof window === 'undefined' || !window.AudioContext) {
+    return
+  }
+
+  const context = kioskAudioContext ??= new window.AudioContext()
+  if (context.state === 'suspended') {
+    void context.resume()
+  }
+  const now = context.currentTime + 0.01
+  const tone = (frequency: number, start: number, duration: number, volume: number, type: OscillatorType = 'sine') => {
+    const oscillator = context.createOscillator()
+    const gain = context.createGain()
+    oscillator.type = type
+    oscillator.frequency.setValueAtTime(frequency, start)
+    gain.gain.setValueAtTime(volume, start)
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration)
+    oscillator.connect(gain).connect(context.destination)
+    oscillator.start(start)
+    oscillator.stop(start + duration)
+  }
+  const noise = (start: number, duration: number, volume: number) => {
+    const buffer = context.createBuffer(1, Math.ceil(context.sampleRate * duration), context.sampleRate)
+    const samples = buffer.getChannelData(0)
+    for (let index = 0; index < samples.length; index += 1) {
+      samples[index] = Math.random() * 2 - 1
+    }
+    const source = context.createBufferSource()
+    const filter = context.createBiquadFilter()
+    const gain = context.createGain()
+    source.buffer = buffer
+    filter.type = 'lowpass'
+    filter.frequency.value = 2200
+    gain.gain.setValueAtTime(volume, start)
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration)
+    source.connect(filter).connect(gain).connect(context.destination)
+    source.start(start)
+  }
+
+  if (cue === 'tick') tone(880, now, 0.07, 0.025, 'triangle')
+  if (cue === 'filter') tone(659, now, 0.1, 0.018, 'triangle')
+  if (cue === 'shutter') {
+    noise(now, 0.055, 0.055)
+    noise(now + 0.07, 0.04, 0.035)
+    tone(180, now, 0.09, 0.025, 'triangle')
+  }
+  if (cue === 'start' || cue === 'confirm') {
+    tone(523, now, 0.22, 0.025, 'sine')
+    tone(659, now + 0.09, 0.28, 0.02, 'sine')
+  }
+  if (cue === 'high-five') {
+    noise(now, 0.09, 0.045)
+    tone(784, now + 0.03, 0.24, 0.025, 'triangle')
+  }
+  if (cue === 'complete') {
+    tone(523, now, 0.35, 0.025)
+    tone(659, now + 0.12, 0.38, 0.022)
+    tone(784, now + 0.24, 0.45, 0.02)
+  }
 }
 
 function photoFilterStyle(adjustments: PhotoAdjustments) {
@@ -336,6 +401,7 @@ export function KioskPage() {
   const [filterMenuOpen, setFilterMenuOpen] = useState(false)
   const [processIndex, setProcessIndex] = useState(0)
   const [completionSeconds, setCompletionSeconds] = useState(45)
+  const [soundEnabled, setSoundEnabled] = useState(true)
   const [paymentSettings] = useState(() => loadDemoEventPaymentSettings(currentEventId))
   const [paymentStatus, setPaymentStatus] = useState<'awaiting' | 'verifying' | 'verified'>('awaiting')
 
@@ -373,6 +439,12 @@ export function KioskPage() {
       return
     }
 
+    if (countdown === 1) {
+      playKioskSfx('shutter', soundEnabled)
+    } else if (captureTrigger !== 'gesture' || countdown !== 3) {
+      playKioskSfx('tick', soundEnabled)
+    }
+
     const timer = window.setTimeout(() => {
       if (countdown > 1) {
         setCountdown((value) => value - 1)
@@ -382,7 +454,7 @@ export function KioskPage() {
     }, 450)
 
     return () => window.clearTimeout(timer)
-  }, [countdown, step])
+  }, [captureTrigger, countdown, soundEnabled, step])
 
   useEffect(() => {
     if (step !== 'preview') {
@@ -390,6 +462,7 @@ export function KioskPage() {
     }
 
     const handleHighFive = () => {
+      playKioskSfx('high-five', soundEnabled)
       setCaptureTrigger('gesture')
       setCountdown(3)
       setStep('countdown')
@@ -397,7 +470,7 @@ export function KioskPage() {
 
     window.addEventListener(highFiveEvent, handleHighFive)
     return () => window.removeEventListener(highFiveEvent, handleHighFive)
-  }, [step])
+  }, [soundEnabled, step])
 
   useEffect(() => {
     if (step !== 'edit') {
@@ -471,6 +544,8 @@ export function KioskPage() {
       return
     }
 
+    playKioskSfx('complete', soundEnabled)
+
     const timer = window.setInterval(() => {
       setCompletionSeconds((seconds) => {
         if (seconds <= 1) {
@@ -482,7 +557,7 @@ export function KioskPage() {
     }, 1000)
 
     return () => window.clearInterval(timer)
-  }, [step])
+  }, [soundEnabled, step])
 
   useEffect(() => {
     if (step === 'complete' && completionSeconds === 0) {
@@ -514,6 +589,7 @@ export function KioskPage() {
   }
 
   function keepPhoto() {
+    playKioskSfx('confirm', soundEnabled)
     if (replacingCaptureIndex !== null) {
       setCaptures((current) => current.map((capture, index) => (
         index === replacingCaptureIndex
@@ -560,12 +636,14 @@ export function KioskPage() {
   }
 
   function selectFilter(filter: PhotoFilter) {
+    playKioskSfx('filter', soundEnabled)
     updateSelectedAdjustments({ filter })
     setFilterMenuOpen(false)
     window.requestAnimationFrame(() => filterButtonRef.current?.focus())
   }
 
   function finishPhotoEdits() {
+    playKioskSfx('confirm', soundEnabled)
     setProcessIndex(0)
     setStep('processing')
   }
@@ -575,6 +653,19 @@ export function KioskPage() {
       <header className={`kiosk__topbar${step === 'attract' ? ' kiosk__topbar--attract' : ' kiosk__topbar--session'}`}>
         <div className="kiosk__identity">
           <BrandMark linked={false} />
+          <button
+            className="icon-button kiosk__sound-toggle"
+            type="button"
+            aria-label={soundEnabled ? 'Mute sound effects' : 'Turn sound effects on'}
+            aria-pressed={!soundEnabled}
+            onClick={() => {
+              const nextEnabled = !soundEnabled
+              setSoundEnabled(nextEnabled)
+              playKioskSfx('confirm', nextEnabled)
+            }}
+          >
+            {soundEnabled ? <SpeakerHigh aria-hidden="true" size={22} /> : <SpeakerSlash aria-hidden="true" size={22} />}
+          </button>
         </div>
         {step === 'attract' ? null : <WorkflowRail step={step} paymentEnabled={paymentRequired} />}
       </header>
@@ -590,7 +681,10 @@ export function KioskPage() {
               <span className="event-date">July 19, 2026</span>
               <h1 id="attract-heading">Ready for your photo?</h1>
               <p>Three quick shots, a printed keepsake, and a private gallery for your phone.</p>
-              <button className="button button--primary button--kiosk" type="button" onClick={() => setStep('package')}>
+              <button className="button button--primary button--kiosk" type="button" onClick={() => {
+                playKioskSfx('start', soundEnabled)
+                setStep('package')
+              }}>
                 Start session
                 <ArrowRight aria-hidden="true" size={26} />
               </button>
