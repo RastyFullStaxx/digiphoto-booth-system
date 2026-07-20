@@ -39,11 +39,12 @@ The Windows booth engine is the hardware authority. The tablet is a user-facing 
 5. Show mirrored live preview and the configured countdown.
 6. Capture the number of shots required by the published template.
 7. Allow one retake per shot by default.
-8. Let the guest select photos, a published layout variant, and safe filters such as original or black-and-white.
-9. Render and save the final output before printing.
-10. Print the package's configured copies without a browser print dialog.
-11. Display a private gallery QR code.
-12. Reset automatically after completion or inactivity.
+8. Allow an operator-enabled high-five gesture trigger. Gesture recognition is a booth-engine input and invokes the same persisted capture command as the on-screen shutter; the browser never controls the camera directly.
+9. After capture, show a timed Process step where the guest can select photos, replace a selected photo through the normal capture/review path, choose a published layout variant, and apply safe filters.
+10. Render and save the final output before printing.
+11. Print the package's configured copies without a browser print dialog.
+12. Display a private gallery QR code.
+13. Reset automatically after completion or inactivity.
 
 Only one guest session and one serialized print queue may be active on a booth. Restart recovery must resume from persisted state without losing captures, charging twice, or printing duplicates.
 

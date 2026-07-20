@@ -1,6 +1,7 @@
 import {
   ArrowRight,
   Camera,
+  CaretDown,
   Check,
   CheckCircle,
   CloudCheck,
@@ -11,6 +12,7 @@ import {
   Printer,
   QrCode,
   ShieldCheck,
+  Timer,
   UserFocus,
   UsersThree,
   WifiHigh,
@@ -24,7 +26,7 @@ import {
   SafeShield2Line,
   Sparkles2Line,
 } from '@mingcute/react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { simulatorImages } from '../assets'
 import {
@@ -73,8 +75,10 @@ const defaultPhotoAdjustments: PhotoAdjustments = {
   filter: 'original',
 }
 
-const freeWorkflow = ['Choose', 'Privacy', 'Capture', 'Print', 'Complete'] as const
-const paidWorkflow = ['Choose', 'Privacy', 'Payment', 'Capture', 'Print', 'Complete'] as const
+const processTimeSeconds = 120
+const highFiveEvent = 'digiphoto:high-five'
+const freeWorkflow = ['Choose', 'Privacy', 'Capture', 'Process', 'Print', 'Complete'] as const
+const paidWorkflow = ['Choose', 'Privacy', 'Payment', 'Capture', 'Process', 'Print', 'Complete'] as const
 const freeWorkflowIndex: Record<KioskStep, number> = {
   attract: -1,
   package: 0,
@@ -83,9 +87,9 @@ const freeWorkflowIndex: Record<KioskStep, number> = {
   preview: 2,
   countdown: 2,
   review: 2,
-  edit: 2,
-  processing: 3,
-  complete: 4,
+  edit: 3,
+  processing: 4,
+  complete: 5,
 }
 const paidWorkflowIndex: Record<KioskStep, number> = {
   attract: -1,
@@ -95,9 +99,9 @@ const paidWorkflowIndex: Record<KioskStep, number> = {
   preview: 3,
   countdown: 3,
   review: 3,
-  edit: 3,
-  processing: 4,
-  complete: 5,
+  edit: 4,
+  processing: 5,
+  complete: 6,
 }
 
 const currentEventId = '11111111-1111-4111-8111-111111111112'
@@ -120,8 +124,9 @@ const workflowIcons = {
   Privacy: SafeShield2Line,
   Payment: QrcodeLine,
   Capture: Camera2Line,
+  Process: Sparkles2Line,
   Print: PrintLine,
-  Complete: Sparkles2Line,
+  Complete: CozyCheck,
 } as const
 
 const photoFilters: ReadonlyArray<{ value: PhotoFilter; label: string }> = [
@@ -150,6 +155,10 @@ function photoFilterStyle(adjustments: PhotoAdjustments) {
 
 function signedValue(value: number, suffix: string, digits = 0) {
   return `${value > 0 ? '+' : ''}${value.toFixed(digits)}${suffix}`
+}
+
+function formatTimer(seconds: number) {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 }
 
 function PhotoAdjustmentControl({
@@ -319,16 +328,23 @@ export function KioskPage() {
   const [privacyError, setPrivacyError] = useState('')
   const [captures, setCaptures] = useState<EditedCapture[]>([])
   const [selectedEditIndex, setSelectedEditIndex] = useState(0)
+  const [replacingCaptureIndex, setReplacingCaptureIndex] = useState<number | null>(null)
+  const [previewSourceIndex, setPreviewSourceIndex] = useState(0)
+  const [captureTrigger, setCaptureTrigger] = useState<'button' | 'gesture'>('button')
   const [countdown, setCountdown] = useState(3)
+  const [processSeconds, setProcessSeconds] = useState(processTimeSeconds)
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false)
   const [processIndex, setProcessIndex] = useState(0)
   const [completionSeconds, setCompletionSeconds] = useState(45)
   const [paymentSettings] = useState(() => loadDemoEventPaymentSettings(currentEventId))
   const [paymentStatus, setPaymentStatus] = useState<'awaiting' | 'verifying' | 'verified'>('awaiting')
 
-  const currentCapture = simulatorImages[Math.min(captures.length, simulatorImages.length - 1)]
+  const currentCapture = simulatorImages[previewSourceIndex]
   const selectedEditCapture = captures[selectedEditIndex]
   const selectedPackage = packages.find((item) => item.id === packageId) ?? packages[0]
   const paymentRequired = paymentSettings.paymentQrEnabled && selectedPackage.priceMinor > 0
+  const selectedFilterLabel = photoFilters.find((filter) => filter.value === selectedEditCapture?.adjustments.filter)?.label ?? 'Original'
+  const filterButtonRef = useRef<HTMLButtonElement>(null)
 
   const resetSession = useCallback(() => {
     setStep('attract')
@@ -340,7 +356,12 @@ export function KioskPage() {
     setPrivacyError('')
     setCaptures([])
     setSelectedEditIndex(0)
+    setReplacingCaptureIndex(null)
+    setPreviewSourceIndex(0)
+    setCaptureTrigger('button')
     setCountdown(3)
+    setProcessSeconds(processTimeSeconds)
+    setFilterMenuOpen(false)
     setProcessIndex(0)
     setCompletionSeconds(45)
     setPaymentStatus('awaiting')
@@ -362,6 +383,56 @@ export function KioskPage() {
 
     return () => window.clearTimeout(timer)
   }, [countdown, step])
+
+  useEffect(() => {
+    if (step !== 'preview') {
+      return
+    }
+
+    const handleHighFive = () => {
+      setCaptureTrigger('gesture')
+      setCountdown(3)
+      setStep('countdown')
+    }
+
+    window.addEventListener(highFiveEvent, handleHighFive)
+    return () => window.removeEventListener(highFiveEvent, handleHighFive)
+  }, [step])
+
+  useEffect(() => {
+    if (step !== 'edit') {
+      return
+    }
+
+    const timer = window.setInterval(() => {
+      setProcessSeconds((seconds) => Math.max(0, seconds - 1))
+    }, 1000)
+
+    return () => window.clearInterval(timer)
+  }, [step])
+
+  useEffect(() => {
+    if (step === 'edit' && processSeconds === 0) {
+      setProcessIndex(0)
+      setStep('processing')
+    }
+  }, [processSeconds, step])
+
+  useEffect(() => {
+    if (!filterMenuOpen) {
+      return
+    }
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setFilterMenuOpen(false)
+        filterButtonRef.current?.focus()
+      }
+    }
+
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [filterMenuOpen])
 
   useEffect(() => {
     if (step !== 'payment' || paymentStatus === 'awaiting') {
@@ -437,15 +508,31 @@ export function KioskPage() {
   }
 
   function takePhoto() {
+    setCaptureTrigger('button')
     setCountdown(3)
     setStep('countdown')
   }
 
   function keepPhoto() {
+    if (replacingCaptureIndex !== null) {
+      setCaptures((current) => current.map((capture, index) => (
+        index === replacingCaptureIndex
+          ? { source: currentCapture, adjustments: { ...defaultPhotoAdjustments } }
+          : capture
+      )))
+      setSelectedEditIndex(replacingCaptureIndex)
+      setReplacingCaptureIndex(null)
+      setPreviewSourceIndex((index) => (index + 1) % simulatorImages.length)
+      setStep('edit')
+      return
+    }
+
     const nextCaptures = [...captures, { source: currentCapture, adjustments: { ...defaultPhotoAdjustments } }]
     setCaptures(nextCaptures)
+    setPreviewSourceIndex((index) => (index + 1) % simulatorImages.length)
     if (nextCaptures.length === 3) {
       setSelectedEditIndex(0)
+      setProcessSeconds(processTimeSeconds)
       setStep('edit')
       return
     }
@@ -453,6 +540,14 @@ export function KioskPage() {
   }
 
   function retakePhoto() {
+    setPreviewSourceIndex((index) => (index + 1) % simulatorImages.length)
+    setStep('preview')
+  }
+
+  function replaceSelectedPhoto() {
+    const sourceIndex = simulatorImages.findIndex((source) => source === captures[selectedEditIndex].source)
+    setPreviewSourceIndex((sourceIndex + 1) % simulatorImages.length)
+    setReplacingCaptureIndex(selectedEditIndex)
     setStep('preview')
   }
 
@@ -462,6 +557,12 @@ export function KioskPage() {
         ? { ...capture, adjustments: { ...capture.adjustments, ...update } }
         : capture
     )))
+  }
+
+  function selectFilter(filter: PhotoFilter) {
+    updateSelectedAdjustments({ filter })
+    setFilterMenuOpen(false)
+    window.requestAnimationFrame(() => filterButtonRef.current?.focus())
   }
 
   function finishPhotoEdits() {
@@ -714,21 +815,16 @@ export function KioskPage() {
                   </div>
                 ) : null}
               </CropFrame>
-              <ShotRail captures={captures} current={captures.length} />
+              <ShotRail captures={captures} current={replacingCaptureIndex ?? captures.length} />
             </div>
 
             <aside className="capture-screen__actions">
               <div className="capture-guide" aria-hidden="true">
                 <CapybaraLoader animated label="" />
               </div>
-              <h1 id="capture-heading">Look at the camera</h1>
-              <p>{step === 'countdown' ? 'The photo will save automatically.' : 'The camera simulator is ready.'}</p>
-              <button
-                className="button button--primary button--capture"
-                type="button"
-                onClick={takePhoto}
-                disabled={step === 'countdown'}
-              >
+              <h1 id="capture-heading">{replacingCaptureIndex === null ? 'Look at the camera' : `Replace photo ${replacingCaptureIndex + 1}`}</h1>
+              <p>{step === 'countdown' ? (captureTrigger === 'gesture' ? 'High five detected. The photo will save automatically.' : 'The photo will save automatically.') : 'High-five detection is ready. Raise your palm or use the shutter button.'}</p>
+              <button className="button button--primary button--capture" type="button" onClick={takePhoto} disabled={step === 'countdown'}>
                 <Camera aria-hidden="true" size={32} />
                 {step === 'countdown' ? `Photo in ${countdown}` : 'Take photo'}
               </button>
@@ -736,7 +832,7 @@ export function KioskPage() {
                 End session
               </button>
               <div className="capture-screen__health">
-                <StatusLabel label="Camera ready" icon={WifiHigh} />
+                <StatusLabel label="High-five ready" icon={WifiHigh} />
                 <StatusLabel label="Printer ready" icon={Printer} />
               </div>
             </aside>
@@ -749,14 +845,14 @@ export function KioskPage() {
               <CropFrame className="review-stage">
                 <SimulatedPhoto source={currentCapture} />
               </CropFrame>
-              <ShotRail captures={captures} current={captures.length} />
+              <ShotRail captures={captures} current={replacingCaptureIndex ?? captures.length} />
             </div>
             <aside className="review-screen__actions">
               <div className="capture-guide" aria-hidden="true">
                 <CapybaraLoader animated label="" />
               </div>
               <h1 id="review-heading">Keep this photo?</h1>
-              <p>Review this capture now. You can edit all three photos after the set is complete.</p>
+              <p>{replacingCaptureIndex === null ? 'Review this capture now. You can edit all three photos after the set is complete.' : 'Use this replacement or take another shot. Your current photo stays until you confirm.'}</p>
               <button className="button button--secondary button--kiosk" type="button" onClick={retakePhoto}>
                 <ClockCounterClockwise aria-hidden="true" size={22} />
                 Retake photo
@@ -779,14 +875,22 @@ export function KioskPage() {
                   alt={`Photo ${selectedEditIndex + 1} selected for editing`}
                 />
               </CropFrame>
-              <ShotRail captures={captures} current={selectedEditIndex} onSelect={setSelectedEditIndex} />
+              <ShotRail captures={captures} current={selectedEditIndex} onSelect={(index) => {
+                setSelectedEditIndex(index)
+                setFilterMenuOpen(false)
+              }} />
             </div>
             <aside className="review-screen__actions">
               <div className="capture-guide" aria-hidden="true">
                 <CapybaraLoader animated label="" />
               </div>
-              <h1 id="edit-heading">Finish your photos</h1>
-              <p>Choose a photo below, then give its output the look you want. Originals stay unchanged.</p>
+              <h1 id="edit-heading">Process your photos</h1>
+              <p>Choose a photo to edit or replace before your session moves to print.</p>
+              <div className="process-timer" role="timer" aria-label={`${formatTimer(processSeconds)} remaining in photo processing`}>
+                <Timer aria-hidden="true" size={28} />
+                <span><strong>{formatTimer(processSeconds)}</strong><small>left to edit or replace</small></span>
+                <button type="button" onClick={() => setProcessSeconds((seconds) => seconds + 30)}>+30 sec</button>
+              </div>
               <fieldset className="photo-adjustments">
                 <legend>Adjust photo {selectedEditIndex + 1}</legend>
                 <PhotoAdjustmentControl
@@ -820,27 +924,54 @@ export function KioskPage() {
                   onChange={(exposure) => updateSelectedAdjustments({ exposure })}
                 />
               </fieldset>
-              <fieldset className="filter-choice">
-                <legend>Photo filter</legend>
-                <div className="segmented-choice segmented-choice--filters">
-                  {photoFilters.map((filter) => (
-                    <label key={filter.value}>
-                      <input
-                        type="radio"
-                        name="edit-filter"
-                        value={filter.value}
-                        checked={selectedEditCapture.adjustments.filter === filter.value}
-                        onChange={() => updateSelectedAdjustments({ filter: filter.value })}
-                      />
-                      <span>{filter.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-              <button className="button button--primary button--kiosk" type="button" onClick={finishPhotoEdits}>
-                Finish photos
-                <ArrowRight aria-hidden="true" size={24} />
-              </button>
+              <div className="filter-picker">
+                <span className="filter-picker__label">Photo filter</span>
+                <button
+                  ref={filterButtonRef}
+                  className="filter-picker__trigger"
+                  type="button"
+                  aria-label={`Photo filter: ${selectedFilterLabel}`}
+                  aria-expanded={filterMenuOpen}
+                  aria-controls="photo-filter-menu"
+                  onClick={() => setFilterMenuOpen((open) => !open)}
+                >
+                  <span>Filter</span>
+                  <strong>{selectedFilterLabel}</strong>
+                  <CaretDown aria-hidden="true" size={20} />
+                </button>
+                {filterMenuOpen ? (
+                  <div id="photo-filter-menu" className="filter-picker__menu" role="group" aria-label="Choose a photo filter">
+                    {photoFilters.map((filter) => (
+                      <button
+                        type="button"
+                        aria-label={`Preview and apply ${filter.label} filter`}
+                        aria-pressed={selectedEditCapture.adjustments.filter === filter.value}
+                        onClick={() => selectFilter(filter.value)}
+                        key={filter.value}
+                      >
+                        <span className="filter-picker__preview">
+                          <SimulatedPhoto
+                            source={selectedEditCapture.source}
+                            style={photoFilterStyle({ ...selectedEditCapture.adjustments, filter: filter.value })}
+                            alt=""
+                          />
+                        </span>
+                        <span>{filter.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              <div className="process-actions">
+                <button className="button button--secondary button--kiosk" type="button" onClick={replaceSelectedPhoto}>
+                  <ClockCounterClockwise aria-hidden="true" size={22} />
+                  Replace photo {selectedEditIndex + 1}
+                </button>
+                <button className="button button--primary button--kiosk" type="button" onClick={finishPhotoEdits}>
+                  Finish and print
+                  <ArrowRight aria-hidden="true" size={24} />
+                </button>
+              </div>
             </aside>
           </section>
         ) : null}

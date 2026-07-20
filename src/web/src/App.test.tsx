@@ -77,6 +77,18 @@ describe('DigiPhoto demo routes', () => {
     expect(screen.queryByRole('slider', { name: 'Brightness' })).not.toBeInTheDocument()
   })
 
+  it('accepts the simulator high-five trigger through the normal capture countdown', async () => {
+    const user = userEvent.setup()
+    await reachPrivacy(user)
+    await user.click(screen.getByRole('checkbox', { name: /I have read the privacy notice/i }))
+    await user.click(screen.getByRole('radio', { name: /No, everyone is 18 or older/i }))
+    await user.click(screen.getByRole('button', { name: /Continue to camera/i }))
+    fireEvent(window, new Event('digiphoto:high-five'))
+
+    expect(screen.getByText(/High five detected/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Keep this photo?' }, { timeout: 2_500 })).toBeInTheDocument()
+  })
+
   it('edits each output only after all three captures are accepted', async () => {
     const user = userEvent.setup()
     await reachPrivacy(user)
@@ -91,12 +103,15 @@ describe('DigiPhoto demo routes', () => {
       await user.click(screen.getByRole('button', { name: /Use this photo/i }))
     }
 
-    expect(screen.getByRole('heading', { name: 'Finish your photos' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Process your photos' })).toBeInTheDocument()
+    expect(screen.getByRole('timer', { name: /2:00 remaining/i })).toBeInTheDocument()
 
     fireEvent.change(screen.getByRole('slider', { name: 'Brightness' }), { target: { value: '20' } })
     fireEvent.change(screen.getByRole('slider', { name: 'Contrast' }), { target: { value: '-10' } })
     fireEvent.change(screen.getByRole('slider', { name: 'Exposure' }), { target: { value: '0.3' } })
-    await user.click(screen.getByRole('radio', { name: 'Warm' }))
+    await user.click(screen.getByRole('button', { name: 'Photo filter: Original' }))
+    expect(screen.getAllByRole('button', { name: /Preview and apply .* filter/i })).toHaveLength(5)
+    await user.click(screen.getByRole('button', { name: 'Preview and apply Warm filter' }))
 
     expect(screen.getByAltText('Photo 1 selected for editing')).toHaveStyle({
       filter: 'sepia(0.18) saturate(1.18) brightness(1.477) contrast(0.900)',
@@ -106,11 +121,19 @@ describe('DigiPhoto demo routes', () => {
     expect(screen.getByRole('slider', { name: 'Brightness' })).toHaveValue('0')
     expect(screen.getByRole('slider', { name: 'Contrast' })).toHaveValue('0')
     expect(screen.getByRole('slider', { name: 'Exposure' })).toHaveValue('0')
-    expect(screen.getByRole('radio', { name: 'Original' })).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Photo filter: Original' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Edit photo 1' }))
     expect(screen.getByRole('slider', { name: 'Brightness' })).toHaveValue('20')
-    expect(screen.getByRole('radio', { name: 'Warm' })).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Photo filter: Warm' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Replace photo 1' }))
+    expect(screen.getByRole('heading', { name: 'Replace photo 1' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Take photo' }))
+    await screen.findByRole('heading', { name: 'Keep this photo?' }, { timeout: 2_500 })
+    await user.click(screen.getByRole('button', { name: /Use this photo/i }))
+    expect(screen.getByRole('heading', { name: 'Process your photos' })).toBeInTheDocument()
+    expect(screen.getByRole('slider', { name: 'Brightness' })).toHaveValue('0')
   }, 15_000)
 
   it('keeps the optional payment demo fail-closed until explicit simulated verification', async () => {
@@ -162,7 +185,7 @@ describe('DigiPhoto demo routes', () => {
       await user.click(screen.getByRole('button', { name: /Use this photo/i }))
     }
 
-    await user.click(screen.getByRole('button', { name: 'Finish photos' }))
+    await user.click(screen.getByRole('button', { name: 'Finish and print' }))
     expect(screen.getByText('Machi is preparing your keepsake')).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'Your print is on the way' }, { timeout: 4_000 })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Done' }))

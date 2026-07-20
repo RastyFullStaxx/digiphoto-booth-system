@@ -235,24 +235,32 @@ Run this happy path:
    question. Confirm an actionable error appears and the camera stays locked.
 4. Select **Yes, a minor is included** without guardian confirmation. Confirm the
    guardian gate blocks progress. Then confirm it, or select the adult-only answer.
-5. Continue to the camera and take three photos. For each shot, confirm countdown,
-   review, Original/Black and white, Retake, and Use this photo behave consistently.
+5. Continue to the camera. Confirm the view says **High-five detection is ready**.
+   In the simulator, dispatch `window.dispatchEvent(new Event('digiphoto:high-five'))`
+   from DevTools for one shot, then use **Take photo** for the others. Both triggers
+   must use the same countdown and review.
 6. Confirm the Shutter Rail advances once per accepted photo and never advances on a
    retake.
-7. On processing, confirm the animated capybara and current status communicate
-   progress without blocking the result.
-8. On completion, confirm the wide dark viewfinder, three-frame contact sheet,
+7. In **Process**, confirm the two-minute timer, **+30 sec**, adjustments, filters,
+   and photo selection work. Open the filter selector and confirm all five choices
+   preview the selected photo before applying one. Select **Replace photo**, take and
+   confirm a replacement, and verify the kiosk returns to Process without losing the
+   other photos.
+8. Select **Finish and print**. Confirm the animated capybara and current status
+   communicate print progress without blocking the result.
+9. On completion, confirm the wide dark viewfinder, three-frame contact sheet,
    watercolor capybara/printer scene, outlined **Open private gallery** action, and
    oversized pink **Done** action follow
    `docs/design/concepts/machi-studio-guest-completion.png`. The local gallery link
    is a demo; this screen does not claim to expose a production QR code.
-9. Confirm the reset timer begins at 45 seconds. Select **Add more time** and confirm
+10. Confirm the reset timer begins at 45 seconds. Select **Add more time** and confirm
    it returns to 90 seconds without leaving the completion screen.
-10. Select **Done**. The kiosk must reset to the attract screen with no prior captures
+11. Select **Done**. The kiosk must reset to the attract screen with no prior captures
     or session choices visible. On a separate completion run, leave the timer alone
     and confirm it resets the kiosk automatically after 45 seconds.
 
-The browser kiosk runs a three-shot visual simulation. It does not call the Booth
+The browser kiosk runs a three-shot visual simulation. Its high-five control simulates
+a booth-engine gesture event; it does not perform browser hand tracking. It does not call the Booth
 API, send a print job, create a real gallery token, or scan/generate a real provider
 QR code.
 
