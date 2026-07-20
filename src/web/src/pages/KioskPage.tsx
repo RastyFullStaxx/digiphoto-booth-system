@@ -54,6 +54,23 @@ type KioskStep =
 
 type MinorAnswer = 'yes' | 'no' | ''
 type PhotoFilter = 'original' | 'black-and-white'
+type PhotoAdjustments = {
+  brightness: number
+  contrast: number
+  exposure: number
+  filter: PhotoFilter
+}
+type EditedCapture = {
+  source: string
+  adjustments: PhotoAdjustments
+}
+
+const defaultPhotoAdjustments: PhotoAdjustments = {
+  brightness: 0,
+  contrast: 0,
+  exposure: 0,
+  filter: 'original',
+}
 
 const freeWorkflow = ['Choose', 'Privacy', 'Capture', 'Print', 'Complete'] as const
 const paidWorkflow = ['Choose', 'Privacy', 'Payment', 'Capture', 'Print', 'Complete'] as const
@@ -104,6 +121,55 @@ const workflowIcons = {
   Complete: Sparkles2Line,
 } as const
 
+function photoFilterStyle(adjustments: PhotoAdjustments) {
+  const outputBrightness = (1 + adjustments.brightness / 100) * (2 ** adjustments.exposure)
+  const outputContrast = 1 + adjustments.contrast / 100
+  const grayscale = adjustments.filter === 'black-and-white' ? 'grayscale(1) ' : ''
+
+  return { filter: `${grayscale}brightness(${outputBrightness.toFixed(3)}) contrast(${outputContrast.toFixed(3)})` }
+}
+
+function signedValue(value: number, suffix: string, digits = 0) {
+  return `${value > 0 ? '+' : ''}${value.toFixed(digits)}${suffix}`
+}
+
+function PhotoAdjustmentControl({
+  id,
+  label,
+  value,
+  min,
+  max,
+  step,
+  output,
+  onChange,
+}: {
+  id: string
+  label: string
+  value: number
+  min: number
+  max: number
+  step: number
+  output: string
+  onChange: (value: number) => void
+}) {
+  return (
+    <label className="photo-adjustment" htmlFor={id}>
+      <span>{label}</span>
+      <input
+        id={id}
+        aria-label={label}
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+      <output htmlFor={id}>{output}</output>
+    </label>
+  )
+}
+
 function WorkflowRail({ step, paymentEnabled }: { step: KioskStep; paymentEnabled: boolean }) {
   const workflow = paymentEnabled ? paidWorkflow : freeWorkflow
   const current = paymentEnabled ? paidWorkflowIndex[step] : freeWorkflowIndex[step]
@@ -133,7 +199,7 @@ function WorkflowRail({ step, paymentEnabled }: { step: KioskStep; paymentEnable
   )
 }
 
-function ShotRail({ captures, current }: { captures: ReadonlyArray<string>; current: number }) {
+function ShotRail({ captures, current }: { captures: ReadonlyArray<EditedCapture>; current: number }) {
   return (
     <section className="shot-rail" aria-labelledby="shot-rail-heading">
       <div className="shot-rail__title">
@@ -142,13 +208,17 @@ function ShotRail({ captures, current }: { captures: ReadonlyArray<string>; curr
       </div>
       <ol>
         {[0, 1, 2].map((index) => {
-          const source = captures[index]
-          const state = index === current ? 'current' : source ? 'complete' : 'upcoming'
+          const capture = captures[index]
+          const state = index === current ? 'current' : capture ? 'complete' : 'upcoming'
           return (
             <li className={`shot-rail__frame shot-rail__frame--${state}`} key={index}>
-              <span className="shot-rail__number">{source ? <Check size={14} weight="bold" /> : index + 1}</span>
-              {source ? (
-                <SimulatedPhoto source={source} alt={`Synthetic simulator capture ${index + 1}`} />
+              <span className="shot-rail__number">{capture ? <Check size={14} weight="bold" /> : index + 1}</span>
+              {capture ? (
+                <SimulatedPhoto
+                  source={capture.source}
+                  style={photoFilterStyle(capture.adjustments)}
+                  alt={`Synthetic simulator capture ${index + 1}`}
+                />
               ) : (
                 <span className="shot-rail__empty">Photo {index + 1}</span>
               )}
@@ -161,19 +231,31 @@ function ShotRail({ captures, current }: { captures: ReadonlyArray<string>; curr
   )
 }
 
-function KeepsakeStage({ captures, selectedPackage }: { captures: ReadonlyArray<string>; selectedPackage: DemoPackageSnapshot }) {
-  const stageSource = captures[captures.length - 1] ?? simulatorImages[0]
+function KeepsakeStage({ captures, selectedPackage }: { captures: ReadonlyArray<EditedCapture>; selectedPackage: DemoPackageSnapshot }) {
+  const stageCapture = captures[captures.length - 1] ?? {
+    source: simulatorImages[0],
+    adjustments: defaultPhotoAdjustments,
+  }
   return (
     <figure className="keepsake-stage">
       <CropFrame className="keepsake-stage__viewfinder">
         {selectedPackage.id === 'strip' ? (
-          <SimulatedPhoto source={stageSource} alt="Synthetic selected photo from this demo session" />
+          <SimulatedPhoto
+            source={stageCapture.source}
+            style={photoFilterStyle(stageCapture.adjustments)}
+            alt="Synthetic selected photo from this demo session"
+          />
         ) : (
           <div className="keepsake-portrait-proof" role="img" aria-label="Simulated 4x6 portrait sheet using the three selected photos">
             <div className="keepsake-portrait-proof__sheet">
               <div className="keepsake-portrait-proof__photos">
-                {captures.slice(0, 3).map((source, index) => (
-                  <SimulatedPhoto source={source} alt={`Synthetic output photo ${index + 1}`} key={`${source}-${index}`} />
+                {captures.slice(0, 3).map((capture, index) => (
+                  <SimulatedPhoto
+                    source={capture.source}
+                    style={photoFilterStyle(capture.adjustments)}
+                    alt={`Synthetic output photo ${index + 1}`}
+                    key={`${capture.source}-${index}`}
+                  />
                 ))}
               </div>
               <strong>Mara &amp; Nico</strong>
@@ -199,8 +281,8 @@ export function KioskPage() {
   const [guardianConfirmed, setGuardianConfirmed] = useState(false)
   const [promotionConsent, setPromotionConsent] = useState(false)
   const [privacyError, setPrivacyError] = useState('')
-  const [captures, setCaptures] = useState<string[]>([])
-  const [filter, setFilter] = useState<PhotoFilter>('original')
+  const [captures, setCaptures] = useState<EditedCapture[]>([])
+  const [adjustments, setAdjustments] = useState<PhotoAdjustments>({ ...defaultPhotoAdjustments })
   const [countdown, setCountdown] = useState(3)
   const [processIndex, setProcessIndex] = useState(0)
   const [completionSeconds, setCompletionSeconds] = useState(45)
@@ -220,7 +302,7 @@ export function KioskPage() {
     setPromotionConsent(false)
     setPrivacyError('')
     setCaptures([])
-    setFilter('original')
+    setAdjustments({ ...defaultPhotoAdjustments })
     setCountdown(3)
     setProcessIndex(0)
     setCompletionSeconds(45)
@@ -323,14 +405,19 @@ export function KioskPage() {
   }
 
   function keepPhoto() {
-    const nextCaptures = [...captures, currentCapture]
+    const nextCaptures = [...captures, { source: currentCapture, adjustments: { ...adjustments } }]
     setCaptures(nextCaptures)
-    setFilter('original')
+    setAdjustments({ ...defaultPhotoAdjustments })
     if (nextCaptures.length === 3) {
       setProcessIndex(0)
       setStep('processing')
       return
     }
+    setStep('preview')
+  }
+
+  function retakePhoto() {
+    setAdjustments({ ...defaultPhotoAdjustments })
     setStep('preview')
   }
 
@@ -611,8 +698,8 @@ export function KioskPage() {
         {step === 'review' ? (
           <section className="review-screen kiosk-step" aria-labelledby="review-heading">
             <div className="review-screen__stage-column">
-              <CropFrame className={`review-stage${filter === 'black-and-white' ? ' review-stage--bw' : ''}`}>
-                <SimulatedPhoto source={currentCapture} />
+              <CropFrame className="review-stage">
+                <SimulatedPhoto source={currentCapture} style={photoFilterStyle(adjustments)} />
               </CropFrame>
               <ShotRail captures={captures} current={captures.length} />
             </div>
@@ -621,7 +708,40 @@ export function KioskPage() {
                 <CapybaraLoader animated label="" />
               </div>
               <h1 id="review-heading">Keep this photo?</h1>
-              <p>Your original capture stays unchanged. The filter only affects this output.</p>
+              <p>Your original stays unchanged. These edits affect only this output.</p>
+              <fieldset className="photo-adjustments">
+                <legend>Adjust photo</legend>
+                <PhotoAdjustmentControl
+                  id="photo-brightness"
+                  label="Brightness"
+                  value={adjustments.brightness}
+                  min={-25}
+                  max={25}
+                  step={1}
+                  output={signedValue(adjustments.brightness, '%')}
+                  onChange={(brightness) => setAdjustments((current) => ({ ...current, brightness }))}
+                />
+                <PhotoAdjustmentControl
+                  id="photo-contrast"
+                  label="Contrast"
+                  value={adjustments.contrast}
+                  min={-25}
+                  max={25}
+                  step={1}
+                  output={signedValue(adjustments.contrast, '%')}
+                  onChange={(contrast) => setAdjustments((current) => ({ ...current, contrast }))}
+                />
+                <PhotoAdjustmentControl
+                  id="photo-exposure"
+                  label="Exposure"
+                  value={adjustments.exposure}
+                  min={-0.5}
+                  max={0.5}
+                  step={0.1}
+                  output={signedValue(adjustments.exposure, ' EV', 1)}
+                  onChange={(exposure) => setAdjustments((current) => ({ ...current, exposure }))}
+                />
+              </fieldset>
               <fieldset className="filter-choice">
                 <legend>Photo filter</legend>
                 <div className="segmented-choice segmented-choice--two">
@@ -630,8 +750,8 @@ export function KioskPage() {
                       type="radio"
                       name="filter"
                       value="original"
-                      checked={filter === 'original'}
-                      onChange={() => setFilter('original')}
+                      checked={adjustments.filter === 'original'}
+                      onChange={() => setAdjustments((current) => ({ ...current, filter: 'original' }))}
                     />
                     <span>Original</span>
                   </label>
@@ -640,14 +760,14 @@ export function KioskPage() {
                       type="radio"
                       name="filter"
                       value="black-and-white"
-                      checked={filter === 'black-and-white'}
-                      onChange={() => setFilter('black-and-white')}
+                      checked={adjustments.filter === 'black-and-white'}
+                      onChange={() => setAdjustments((current) => ({ ...current, filter: 'black-and-white' }))}
                     />
                     <span>Black and white</span>
                   </label>
                 </div>
               </fieldset>
-              <button className="button button--secondary button--kiosk" type="button" onClick={() => setStep('preview')}>
+              <button className="button button--secondary button--kiosk" type="button" onClick={retakePhoto}>
                 <ClockCounterClockwise aria-hidden="true" size={22} />
                 Retake photo
               </button>

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -75,6 +75,37 @@ describe('DigiPhoto demo routes', () => {
     expect(await screen.findByRole('heading', { name: 'Keep this photo?' }, { timeout: 2_500 })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Use this photo/i })).toBeInTheDocument()
   })
+
+  it('applies output-only photo edits and preserves them on an accepted capture', async () => {
+    const user = userEvent.setup()
+    await reachPrivacy(user)
+    await user.click(screen.getByRole('checkbox', { name: /I have read the privacy notice/i }))
+    await user.click(screen.getByRole('radio', { name: /No, everyone is 18 or older/i }))
+    await user.click(screen.getByRole('button', { name: /Continue to camera/i }))
+    await user.click(screen.getByRole('button', { name: 'Take photo' }))
+    await screen.findByRole('heading', { name: 'Keep this photo?' }, { timeout: 2_500 })
+
+    fireEvent.change(screen.getByRole('slider', { name: 'Brightness' }), { target: { value: '20' } })
+    fireEvent.change(screen.getByRole('slider', { name: 'Contrast' }), { target: { value: '-10' } })
+    fireEvent.change(screen.getByRole('slider', { name: 'Exposure' }), { target: { value: '0.3' } })
+    await user.click(screen.getByRole('radio', { name: 'Black and white' }))
+
+    expect(screen.getByAltText(/Synthetic simulator photo of three fictional adult event guests/i)).toHaveStyle({
+      filter: 'grayscale(1) brightness(1.477) contrast(0.900)',
+    })
+
+    await user.click(screen.getByRole('button', { name: /Use this photo/i }))
+    expect(screen.getByAltText('Synthetic simulator capture 1')).toHaveStyle({
+      filter: 'grayscale(1) brightness(1.477) contrast(0.900)',
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Take photo' }))
+    await screen.findByRole('heading', { name: 'Keep this photo?' }, { timeout: 2_500 })
+    expect(screen.getByRole('slider', { name: 'Brightness' })).toHaveValue('0')
+    expect(screen.getByRole('slider', { name: 'Contrast' })).toHaveValue('0')
+    expect(screen.getByRole('slider', { name: 'Exposure' })).toHaveValue('0')
+    expect(screen.getByRole('radio', { name: 'Original' })).toBeChecked()
+  }, 10_000)
 
   it('keeps the optional payment demo fail-closed until explicit simulated verification', async () => {
     const user = userEvent.setup()

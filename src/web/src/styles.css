@@ -1372,12 +1372,51 @@ button:disabled,
   border-top: 1px solid var(--line);
 }
 
-.review-stage--bw img {
-  filter: grayscale(1) contrast(1.03);
-}
-
 .filter-choice {
   margin-bottom: 1.5rem;
+}
+
+.photo-adjustments {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0 0 0.85rem;
+  padding: 0;
+  border: 0;
+  text-align: left;
+}
+
+.photo-adjustments legend {
+  margin-bottom: 0.25rem;
+  font-size: 1rem;
+  font-weight: 750;
+}
+
+.photo-adjustment {
+  min-height: 2.75rem;
+  display: grid;
+  grid-template-columns: 5.25rem minmax(5rem, 1fr) 3.75rem;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.photo-adjustment input {
+  width: 100%;
+  accent-color: var(--primary-pressed);
+  cursor: pointer;
+}
+
+.photo-adjustment input:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.photo-adjustment output {
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  text-align: right;
 }
 
 .review-screen__actions .button + .button {
@@ -3091,6 +3130,7 @@ tbody tr:hover {
   .review-screen__actions h1,
   .review-screen__actions p,
   .filter-choice,
+  .photo-adjustments,
   .capture-screen__health {
     grid-column: 1 / -1;
   }
@@ -4293,8 +4333,21 @@ tbody tr:hover {
   }
 
   .review-screen__actions .filter-choice {
-    margin-bottom: 1rem;
+    margin-bottom: 0.75rem;
     text-align: left;
+  }
+
+  .review-screen__actions .capture-guide .capybara-loader {
+    width: min(100%, 5.25rem);
+  }
+
+  .review-screen__actions > p {
+    margin-bottom: 0.75rem;
+  }
+
+  .review-screen__actions .segmented-choice label {
+    min-height: 2.75rem;
+    padding-block: 0.5rem;
   }
 }
 
