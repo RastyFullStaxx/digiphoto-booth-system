@@ -20,5 +20,3 @@ The initial runnable build has executable camera and printer simulators plus an
 explicitly browser-only payment-gate demo. Physical Canon/DNP proof, real PayMongo
 validation, and cloud-wired template publication remain delivery gates rather than
 claims made from simulated behavior.
-
-
